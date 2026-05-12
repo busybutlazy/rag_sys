@@ -56,20 +56,22 @@
 
 ---
 
-## Phase 0 — Infrastructure & Scaffolding
+## Phase 0 — Infrastructure & Scaffolding ✅
 **Goal:** Every service starts, passes health checks, and can reach its database. No real features yet.
 
-- [ ] `docker-compose.yml` — all 6 services on a single internal bridge network, only frontend port exposed
-- [ ] `.env.template` — all required variables documented
-- [ ] `.gitignore` — covers Python, .NET, Node, Docker secrets
-- [ ] Minimal Dockerfiles for each service (multi-stage where sensible)
-- [ ] `GET /health` endpoint on be-server, ai-server, rag-server (returns `{"status":"ok"}`)
-- [ ] MySQL init script — `users` table skeleton
-- [ ] ArangoDB init script — `rag_db` database + collections skeleton
-- [ ] React app scaffold — Vite + TypeScript + Tailwind, login page placeholder
-- [ ] All services reachable across the internal network
+- [x] `docker-compose.yml` — all 6 services on a single internal bridge network, only frontend port exposed
+- [x] `.env.template` — all required variables documented
+- [x] `.gitignore` — covers Python, .NET, Node, Docker secrets
+- [x] Minimal Dockerfiles for each service (multi-stage where sensible)
+- [x] `GET /health` endpoint on be-server, ai-server, rag-server (returns `{"status":"ok"}`)
+- [x] MySQL init script — `users` table skeleton
+- [x] ArangoDB init script — `rag_db` database + collections skeleton
+- [x] React app scaffold — Vite + TypeScript + Tailwind, login page placeholder
+- [x] All services reachable across the internal network
 
 **Deliverable:** `docker compose up` → all containers healthy.
+
+**Note:** Smoke test (`docker compose up`) requires a real `.env` file — copy `.env.template` and fill in values before running.
 
 ---
 
