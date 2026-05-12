@@ -46,7 +46,8 @@ public class NotesController(AppDbContext db) : ControllerBase
         };
         db.Notes.Add(note);
         await db.SaveChangesAsync();
-        return CreatedAtAction(nameof(Get), new { notebookId, id = note.Id }, note);
+        return CreatedAtAction(nameof(Get), new { notebookId, id = note.Id },
+            new { note.Id, note.Title, note.NoteType, note.CreatedAt });
     }
 
     [HttpGet("{id}")]
@@ -54,7 +55,8 @@ public class NotesController(AppDbContext db) : ControllerBase
     {
         var note = await db.Notes.FirstOrDefaultAsync(
             n => n.Id == id && n.NotebookId == notebookId && n.UserId == UserId);
-        return note is null ? NotFound() : Ok(note);
+        return note is null ? NotFound() : Ok(
+            new { note.Id, note.Title, note.Content, note.NoteType, note.CreatedAt, note.UpdatedAt });
     }
 
     [HttpPut("{id}")]
@@ -67,7 +69,7 @@ public class NotesController(AppDbContext db) : ControllerBase
         note.Content = req.Content;
         note.UpdatedAt = DateTime.UtcNow;
         await db.SaveChangesAsync();
-        return Ok(note);
+        return Ok(new { note.Id, note.Title, note.Content, note.NoteType, note.UpdatedAt });
     }
 
     [HttpDelete("{id}")]
