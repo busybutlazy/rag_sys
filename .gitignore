@@ -35,3 +35,4 @@ build/
 Thumbs.db
 
 .claude/
+frontend/package-lock.json
