@@ -59,9 +59,10 @@ public class SourcesController(
     [RequestSizeLimit(50 * 1024 * 1024)]
     public async Task<IActionResult> Upload(string notebookId, IFormFile file)
     {
-        // SEC-03: MIME type allowlist
-        if (!AllowedMimeTypes.Contains(file.ContentType))
-            return BadRequest(new { error = $"File type '{file.ContentType}' is not allowed." });
+        // SEC-03: MIME type allowlist — strip charset/boundary params before checking
+        var mimeType = file.ContentType.Split(';')[0].Trim().ToLowerInvariant();
+        if (!AllowedMimeTypes.Contains(mimeType))
+            return BadRequest(new { error = $"File type '{mimeType}' is not allowed." });
 
         var nb = await db.Notebooks.FirstOrDefaultAsync(n => n.Id == notebookId && n.UserId == UserId);
         if (nb is null) return NotFound(new { error = "Notebook not found" });
@@ -78,7 +79,7 @@ public class SourcesController(
             UserId = UserId,
             NotebookId = notebookId,
             Title = file.FileName,
-            MimeType = file.ContentType,
+            MimeType = mimeType,
             FileSizeBytes = file.Length,
             Status = "uploaded",
         };
@@ -104,7 +105,7 @@ public class SourcesController(
             if (s is null) return;
             try
             {
-                await rag.IngestAsync(s.Id, notebookId, filePath, file.ContentType);
+                await rag.IngestAsync(s.Id, notebookId, filePath, s.MimeType);
                 s.Status = "ingested";
             }
             catch (Exception ex)
