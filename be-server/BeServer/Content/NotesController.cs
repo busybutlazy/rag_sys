@@ -12,8 +12,16 @@ namespace BeServer.Content;
 [Authorize]
 public class NotesController(AppDbContext db) : ControllerBase
 {
-    private string UserId => User.FindFirstValue(ClaimTypes.NameIdentifier)
-        ?? User.FindFirstValue("sub")!;
+    private string UserId
+    {
+        get
+        {
+            var id = User.FindFirstValue(ClaimTypes.NameIdentifier) ?? User.FindFirstValue("sub");
+            if (string.IsNullOrEmpty(id))
+                throw new InvalidOperationException("JWT is missing user identity claim.");
+            return id;
+        }
+    }
 
     [HttpGet]
     public async Task<IActionResult> List(string notebookId) =>

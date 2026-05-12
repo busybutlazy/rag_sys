@@ -12,8 +12,16 @@ namespace BeServer.Content;
 [Authorize]
 public class NotebooksController(AppDbContext db) : ControllerBase
 {
-    private string UserId => User.FindFirstValue(ClaimTypes.NameIdentifier)
-        ?? User.FindFirstValue("sub")!;
+    private string UserId
+    {
+        get
+        {
+            var id = User.FindFirstValue(ClaimTypes.NameIdentifier) ?? User.FindFirstValue("sub");
+            if (string.IsNullOrEmpty(id))
+                throw new InvalidOperationException("JWT is missing user identity claim.");
+            return id;
+        }
+    }
 
     [HttpGet]
     public async Task<IActionResult> List() =>
@@ -36,7 +44,7 @@ public class NotebooksController(AppDbContext db) : ControllerBase
     public async Task<IActionResult> Get(string id)
     {
         var nb = await db.Notebooks
-            .Where(n => n.Id == id && n.UserId == UserId)
+            .Where(n => n.Id == id && n.UserId == UserId && !n.Archived)
             .Select(n => new
             {
                 n.Id, n.Name, n.Description, n.Archived, n.CreatedAt, n.UpdatedAt,
@@ -50,7 +58,7 @@ public class NotebooksController(AppDbContext db) : ControllerBase
     [HttpPut("{id}")]
     public async Task<IActionResult> Update(string id, [FromBody] NotebookRequest req)
     {
-        var nb = await db.Notebooks.FirstOrDefaultAsync(n => n.Id == id && n.UserId == UserId);
+        var nb = await db.Notebooks.FirstOrDefaultAsync(n => n.Id == id && n.UserId == UserId && !n.Archived);
         if (nb is null) return NotFound();
         nb.Name = req.Name;
         nb.Description = req.Description;

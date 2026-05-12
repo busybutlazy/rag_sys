@@ -23,22 +23,38 @@ export default function NotebookDetailPage() {
   async function uploadFile(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0]
     if (!file) return
-    await apiUpload(`/api/notebooks/${id}/sources`, file)
-    reload()
-    if (fileRef.current) fileRef.current.value = ''
+    try {
+      await apiUpload(`/api/notebooks/${id}/sources`, file)
+      reload()
+    } catch (err) {
+      console.error('Upload failed', err)
+      alert('Upload failed. Check the console for details.')
+    } finally {
+      if (fileRef.current) fileRef.current.value = ''
+    }
   }
 
   async function createNote(e: React.FormEvent) {
     e.preventDefault()
-    await apiPost(`/api/notebooks/${id}/notes`, { title: noteTitle || null, content: noteContent })
-    setNoteContent('')
-    setNoteTitle('')
-    reload()
+    try {
+      await apiPost(`/api/notebooks/${id}/notes`, { title: noteTitle || null, content: noteContent })
+      setNoteContent('')
+      setNoteTitle('')
+      reload()
+    } catch (err) {
+      console.error('Save note failed', err)
+      alert('Failed to save note.')
+    }
   }
 
   async function deleteSource(sourceId: string) {
-    await apiDelete(`/api/notebooks/${id}/sources/${sourceId}`)
-    reload()
+    try {
+      await apiDelete(`/api/notebooks/${id}/sources/${sourceId}`)
+      reload()
+    } catch (err) {
+      console.error('Delete failed', err)
+      alert('Failed to delete source.')
+    }
   }
 
   if (!nb) return <div className="p-6 text-gray-400">Loading…</div>

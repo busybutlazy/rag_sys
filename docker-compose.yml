@@ -63,6 +63,7 @@ services:
       ADMIN_PASSWORD: ${ADMIN_PASSWORD}
       RAG_SERVER_URL: http://rag-server:8003
       UPLOAD_DIR: /app/uploads
+      INTERNAL_SECRET: ${INTERNAL_SECRET}
     networks:
       - rag_net
     volumes:
@@ -101,6 +102,7 @@ services:
       ARANGO_USER: ${ARANGO_USER}
       ARANGO_PASSWORD: ${ARANGO_PASSWORD}
       OPENAI_API_KEY: ${OPENAI_API_KEY}
+      INTERNAL_SECRET: ${INTERNAL_SECRET}
     volumes:
       - uploads:/app/uploads
     networks:
