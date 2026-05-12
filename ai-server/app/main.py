@@ -2,9 +2,15 @@ import json
 import os
 from fastapi import Depends, FastAPI
 from fastapi.responses import StreamingResponse
-from app.auth import get_current_user
+from app.auth import get_current_user, _JWT_SECRET
 from app.gateway.openai_provider import OpenAIGateway
 from app.models import ChatRequest
+
+_MIN_SECRET_LEN = 32
+if len(_JWT_SECRET) < _MIN_SECRET_LEN:
+    raise SystemExit(
+        f"JWT_SECRET must be at least {_MIN_SECRET_LEN} characters (got {len(_JWT_SECRET)})"
+    )
 
 app = FastAPI(title="AI Server", version="0.1.0")
 
