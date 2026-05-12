@@ -1,4 +1,6 @@
 import uuid
+import time
+from arango.exceptions import IndexCreateError
 from app.embedder import DIMENSIONS
 
 
@@ -6,15 +8,22 @@ def ensure_vector_index(db) -> None:
     col = db.collection("chunks")
     existing = {idx["type"] for idx in col.indexes()}
     if "vector" not in existing:
-        col.add_index({
-            "type": "vector",
-            "fields": ["embedding"],
-            "params": {
-                "metric": "cosine",
-                "dimension": DIMENSIONS,
-                "nLists": 2,
-            },
-        })
+        for attempt in range(10):
+            try:
+                col.add_index({
+                    "type": "vector",
+                    "fields": ["embedding"],
+                    "params": {
+                        "metric": "cosine",
+                        "dimension": DIMENSIONS,
+                        "nLists": 2,
+                    },
+                })
+                return
+            except IndexCreateError as exc:
+                if "vector index not ready" not in str(exc) or attempt == 9:
+                    raise
+                time.sleep(2)
 
 
 def ensure_search_view(db) -> None:

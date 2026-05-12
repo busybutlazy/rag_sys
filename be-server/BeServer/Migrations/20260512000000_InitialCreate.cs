@@ -1,4 +1,6 @@
 using System;
+using BeServer.Data;
+using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Migrations;
 
 #nullable disable
@@ -6,6 +8,8 @@ using Microsoft.EntityFrameworkCore.Migrations;
 namespace BeServer.Migrations
 {
     /// <inheritdoc />
+    [DbContext(typeof(AppDbContext))]
+    [Migration("20260512000000_InitialCreate")]
     public partial class InitialCreate : Migration
     {
         /// <inheritdoc />

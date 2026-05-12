@@ -1,10 +1,14 @@
 using System;
+using BeServer.Data;
+using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Migrations;
 
 #nullable disable
 
 namespace BeServer.Migrations
 {
+    [DbContext(typeof(AppDbContext))]
+    [Migration("20260512010000_Phase2Content")]
     public partial class Phase2Content : Migration
     {
         protected override void Up(MigrationBuilder migrationBuilder)
