@@ -103,16 +103,22 @@
 
 ---
 
-## Phase 2 — Notebook & Content Management
+## Phase 2 — Notebook & Content Management ✅
 **Goal:** CRUD for notebooks, sources (file upload), and notes; stored in MySQL; files on disk (Docker volume).
 
-- [ ] MySQL schema: `notebooks`, `sources`, `notes`, `chat_sessions` tables
-- [ ] BE server: REST endpoints for notebooks, sources (file upload), notes
-- [ ] RAG server: `POST /ingest` — accept file bytes, persist to ArangoDB raw document collection (no chunking yet)
-- [ ] Frontend: Notebook list, notebook detail, source upload, note editor (markdown)
-- [ ] File storage: Docker named volume mounted to both be-server and rag-server
+- [x] MySQL schema: `notebooks`, `sources`, `notes`, `chat_sessions` tables
+- [x] BE server: REST endpoints for notebooks, sources (file upload), notes
+- [x] RAG server: `POST /ingest` + `DELETE /documents/:id`, guarded by `X-Internal-Secret`
+- [x] Frontend: Notebook list, notebook detail, source upload, note editor
+- [x] File storage: Docker named volume mounted to both be-server and rag-server
 
 **Deliverable:** Create a notebook, upload a PDF, write a note — all persisted and visible in the UI.
+
+**Learnings:**
+- Fire-and-forget background tasks must use `IServiceScopeFactory` for a fresh `DbContext` scope.
+- DB record should be written before the file (avoids orphaned files on DB failure).
+- All inter-service endpoints need an `INTERNAL_SECRET` header to prevent unauthenticated access.
+- MIME allowlist on upload prevents arbitrary file types; allowlist currently: PDF, text, markdown, CSV, JSON, DOCX.
 
 ---
 
