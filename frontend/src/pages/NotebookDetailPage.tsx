@@ -1,6 +1,8 @@
-import { useEffect, useState, useRef } from 'react'
+import { useEffect, useState, useRef, useCallback } from 'react'
 import { useParams, Link } from 'react-router-dom'
 import { apiGet, apiPost, apiUpload, apiDelete } from '../lib/api'
+import { useAuthContext } from '../contexts/AuthContext'
+import ChatPanel from '../components/ChatPanel'
 
 interface Source { id: string; title: string; mimeType: string; status: string }
 interface Note { id: string; title?: string; noteType: string; createdAt: string }
@@ -11,6 +13,8 @@ interface NotebookDetail {
 
 export default function NotebookDetailPage() {
   const { id } = useParams<{ id: string }>()
+  const { accessToken } = useAuthContext()
+  const getToken = useCallback(() => accessToken, [accessToken])
   const [nb, setNb] = useState<NotebookDetail | null>(null)
   const [noteContent, setNoteContent] = useState('')
   const [noteTitle, setNoteTitle] = useState('')
@@ -120,6 +124,11 @@ export default function NotebookDetailPage() {
             </li>
           ))}
         </ul>
+      </section>
+
+      <section>
+        <h2 className="text-lg font-semibold mb-2">Chat</h2>
+        <ChatPanel notebookId={nb.id} getToken={getToken} />
       </section>
     </div>
   )
