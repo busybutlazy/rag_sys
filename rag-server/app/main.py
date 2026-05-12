@@ -2,7 +2,7 @@ import os
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, HTTPException, Header, Query
 from app.db import get_db
-from app.models import IngestRequest, SearchResponse
+from app.models import IngestRequest, SearchResponse, BenchmarkResponse
 from app import chunker, embedder, vector_store
 
 _INTERNAL_SECRET = os.environ.get("INTERNAL_SECRET", "")
@@ -17,7 +17,9 @@ def _check_secret(x_internal_secret: str | None) -> None:
 
 @asynccontextmanager
 async def lifespan(_: FastAPI):
-    vector_store.ensure_vector_index(get_db())
+    db = get_db()
+    vector_store.ensure_vector_index(db)
+    vector_store.ensure_search_view(db)
     yield
 
 
@@ -89,6 +91,53 @@ async def search_vector(
     query_embedding = await embedder.embed(q)
     results = vector_store.search_vector(get_db(), query_embedding, notebook_id, top_k)
     return SearchResponse(results=results)
+
+
+@app.get("/search/bm25", response_model=SearchResponse)
+async def search_bm25_endpoint(
+    q: str = Query(..., description="Query text"),
+    notebook_id: str = Query(..., description="Notebook to search within"),
+    top_k: int = Query(default=5, ge=1, le=20),
+    x_internal_secret: str | None = Header(default=None),
+):
+    _check_secret(x_internal_secret)
+    results = vector_store.search_bm25(get_db(), q, notebook_id, top_k)
+    return SearchResponse(results=results)
+
+
+@app.get("/search/hybrid", response_model=SearchResponse)
+async def search_hybrid_endpoint(
+    q: str = Query(..., description="Query text"),
+    notebook_id: str = Query(..., description="Notebook to search within"),
+    top_k: int = Query(default=5, ge=1, le=20),
+    alpha: float = Query(default=0.5, ge=0.0, le=1.0, description="Vector weight (1-alpha goes to BM25)"),
+    x_internal_secret: str | None = Header(default=None),
+):
+    _check_secret(x_internal_secret)
+    query_embedding = await embedder.embed(q)
+    results = vector_store.search_hybrid(get_db(), query_embedding, q, notebook_id, top_k, alpha)
+    return SearchResponse(results=results)
+
+
+@app.get("/search/benchmark", response_model=BenchmarkResponse)
+async def search_benchmark(
+    q: str = Query(..., description="Query text"),
+    notebook_id: str = Query(..., description="Notebook to search within"),
+    top_k: int = Query(default=5, ge=1, le=20),
+    x_internal_secret: str | None = Header(default=None),
+):
+    _check_secret(x_internal_secret)
+    query_embedding = await embedder.embed(q)
+    db = get_db()
+    vec_results = vector_store.search_vector(db, query_embedding, notebook_id, top_k)
+    bm25_results = vector_store.search_bm25(db, q, notebook_id, top_k)
+    hybrid_results = vector_store.search_hybrid(db, query_embedding, q, notebook_id, top_k)
+    return BenchmarkResponse(
+        query=q,
+        vector=vec_results,
+        bm25=bm25_results,
+        hybrid=hybrid_results,
+    )
 
 
 @app.delete("/documents/{source_id}", status_code=204)

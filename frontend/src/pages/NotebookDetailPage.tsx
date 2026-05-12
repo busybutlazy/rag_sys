@@ -3,6 +3,7 @@ import { useParams, Link } from 'react-router-dom'
 import { apiGet, apiPost, apiUpload, apiDelete } from '../lib/api'
 import { useAuthContext } from '../contexts/AuthContext'
 import ChatPanel from '../components/ChatPanel'
+import SearchPanel from '../components/SearchPanel'
 
 interface Source { id: string; title: string; mimeType: string; status: string }
 interface Note { id: string; title?: string; noteType: string; createdAt: string }
@@ -124,6 +125,11 @@ export default function NotebookDetailPage() {
             </li>
           ))}
         </ul>
+      </section>
+
+      <section>
+        <h2 className="text-lg font-semibold mb-2">Search</h2>
+        <SearchPanel notebookId={nb.id} />
       </section>
 
       <section>

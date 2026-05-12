@@ -17,6 +17,27 @@ def ensure_vector_index(db) -> None:
         })
 
 
+def ensure_search_view(db) -> None:
+    existing = {v["name"] for v in db.views()}
+    if "chunks_view" not in existing:
+        db.create_view(
+            name="chunks_view",
+            view_type="arangosearch",
+            properties={
+                "links": {
+                    "chunks": {
+                        "fields": {
+                            "text": {"analyzers": ["text_en"]},
+                            "notebook_id": {"analyzers": ["identity"]},
+                            "source_id": {"analyzers": ["identity"]},
+                            "chunk_index": {},
+                        }
+                    }
+                }
+            },
+        )
+
+
 def store_chunks(
     db,
     source_id: str,
@@ -73,3 +94,59 @@ def search_vector(
         },
     )
     return list(cursor)
+
+
+def search_bm25(
+    db,
+    query: str,
+    notebook_id: str,
+    top_k: int = 5,
+) -> list[dict]:
+    aql = """
+    FOR doc IN chunks_view
+      SEARCH doc.notebook_id == @notebook_id
+        AND ANALYZER(doc.text IN TOKENS(@query, 'text_en'), 'text_en')
+      SORT BM25(doc) DESC
+      LIMIT @top_k
+      RETURN {
+        source_id: doc.source_id,
+        chunk_index: doc.chunk_index,
+        text: doc.text
+      }
+    """
+    cursor = db.aql.execute(
+        aql,
+        bind_vars={"notebook_id": notebook_id, "query": query, "top_k": top_k},
+    )
+    return list(cursor)
+
+
+def search_hybrid(
+    db,
+    query_embedding: list[float],
+    query: str,
+    notebook_id: str,
+    top_k: int = 5,
+    alpha: float = 0.5,
+) -> list[dict]:
+    fetch_k = min(top_k * 3, 60)
+    vec_results = search_vector(db, query_embedding, notebook_id, fetch_k)
+    bm25_results = search_bm25(db, query, notebook_id, fetch_k)
+
+    k_rrf = 60
+    scores: dict[tuple, float] = {}
+    for rank, doc in enumerate(vec_results, start=1):
+        key = (doc["source_id"], doc["chunk_index"])
+        scores[key] = scores.get(key, 0.0) + alpha / (k_rrf + rank)
+    for rank, doc in enumerate(bm25_results, start=1):
+        key = (doc["source_id"], doc["chunk_index"])
+        scores[key] = scores.get(key, 0.0) + (1.0 - alpha) / (k_rrf + rank)
+
+    chunk_map: dict[tuple, dict] = {}
+    for d in bm25_results:
+        chunk_map[(d["source_id"], d["chunk_index"])] = d
+    for d in vec_results:
+        chunk_map[(d["source_id"], d["chunk_index"])] = d
+
+    sorted_keys = sorted(scores, key=lambda k: scores[k], reverse=True)
+    return [chunk_map[k] for k in sorted_keys[:top_k]]
