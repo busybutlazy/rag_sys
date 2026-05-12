@@ -61,8 +61,12 @@ services:
       JWT_SECRET: ${JWT_SECRET}
       ADMIN_USERNAME: ${ADMIN_USERNAME}
       ADMIN_PASSWORD: ${ADMIN_PASSWORD}
+      RAG_SERVER_URL: http://rag-server:8003
+      UPLOAD_DIR: /app/uploads
     networks:
       - rag_net
+    volumes:
+      - uploads:/app/uploads
     depends_on:
       mysql:
         condition: service_healthy

@@ -2,6 +2,7 @@ using System.Text;
 using BeServer.Auth;
 using BeServer.Data;
 using BeServer.Data.Entities;
+using BeServer.Services;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
@@ -47,6 +48,9 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
 builder.Services.AddAuthorization();
 builder.Services.AddScoped<JwtService>();
 builder.Services.AddControllers();
+builder.Services.AddHttpClient<RagClient>(client =>
+    client.BaseAddress = new Uri(
+        builder.Configuration["RAG_SERVER_URL"] ?? "http://rag-server:8003"));
 
 builder.Services.AddCors(options =>
     options.AddPolicy("frontend", policy =>
