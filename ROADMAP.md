@@ -166,18 +166,25 @@
 
 ---
 
-## Phase 5 — Sparse Search (BM25) & Hybrid Search
+## Phase 5 — Sparse Search (BM25) & Hybrid Search ✅
 **Goal:** ArangoDB full-text analyzer for BM25; hybrid re-ranker combining vector + BM25 scores.
 
-- [ ] ArangoDB: `ArangoSearch` view on `chunks` collection with text analyzer
-- [ ] RAG server: `GET /search/bm25?q=...` → BM25-ranked chunks
-- [ ] Hybrid search: RRF (Reciprocal Rank Fusion) combining vector + BM25 results
-- [ ] RAG server: `GET /search/hybrid?q=...` (default search used by AI server)
-- [ ] Configurable weight `alpha` for vector vs BM25 blend
-- [ ] Benchmark endpoint: run vector / BM25 / hybrid side by side for a query, return comparison JSON
-- [ ] Frontend: search results panel with mode selector (vector / BM25 / hybrid)
+- [x] ArangoDB: `ArangoSearch` view (`chunks_view`) created at startup with `text_en` analyzer on `text` field
+- [x] RAG server: `GET /search/bm25?q=...` → BM25-ranked chunks via AQL `SEARCH` + `BM25()`
+- [x] Hybrid search: RRF (Reciprocal Rank Fusion) combining vector + BM25 results
+- [x] RAG server: `GET /search/hybrid?q=...` (default search used by AI server)
+- [x] Configurable weight `alpha` for vector vs BM25 blend (default 0.5)
+- [x] Benchmark endpoint: `GET /search/benchmark` — runs all three modes, returns comparison JSON
+- [x] Frontend: `SearchPanel` with vector / BM25 / hybrid / benchmark mode selector in notebook detail page
+- [x] BE server: `GET /api/notebooks/{id}/search` and `.../benchmark` proxy endpoints with JWT + ownership check
 
 **Deliverable:** Hybrid search demonstrably outperforms pure vector search on keyword-heavy queries.
+
+**Learnings:**
+- `proxy_pass http://backend/;` (trailing slash) in nginx strips the location prefix — all BE `/api/` routes were returning 404 in Docker. Always omit the trailing slash: `proxy_pass http://backend;`.
+- ArangoSearch view must explicitly declare the `text_en` analyzer on the `text` field; the `notebook_id` field needs the `identity` analyzer for exact-match filtering inside `SEARCH`.
+- RRF constant `k=60` is standard (Cormack et al., 2009). Alpha weighting lets users tune vector vs BM25 contribution without changing the rank-fusion formula.
+- Benchmark endpoint is intentionally allowed to make 2× DB calls (hybrid internally re-runs vector + BM25 with larger `fetch_k`) — simplicity over micro-optimization for an experiment tool.
 
 ---
 
