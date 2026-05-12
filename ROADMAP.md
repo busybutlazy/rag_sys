@@ -46,13 +46,22 @@
 ## Phase Workflow (every phase follows this sequence)
 
 1. **Plan** — detailed implementation plan written to `docs/superpowers/plans/`
-2. **Branch** — `git checkout -b phase-N-<short-name>`
-3. **Implement** — follow the plan task by task
-4. **PR → main** — open pull request, merge
-5. **Code Review** — agent writes `docs/reviews/phase-N-review.md` (security / performance / maintainability / logic)
-6. **Patch branch** — `git checkout -b phase-N-patch`
-7. **Patch PR → main** — apply review fixes, merge
-8. **Update ROADMAP** — mark phase complete, record learnings
+2. **Branch** — `git checkout -b phase-N-<short-name>` from `main`
+3. **Implement** — follow the plan task by task, commit on the feature branch
+4. **Code Review** — agent writes `docs/reviews/phase-N-review.md` (security / performance / maintainability / logic)
+5. **Patch branch** — `git checkout -b phase-N-patch` **from `phase-N-<short-name>`** (NOT from main)
+6. **Apply fixes** on `phase-N-patch`, then **rebase back onto `phase-N-<short-name>`**:
+   ```
+   git rebase phase-N-<short-name>
+   git checkout phase-N-<short-name>
+   git merge --ff-only phase-N-patch
+   ```
+7. **Single PR** — `phase-N-<short-name>` → `main` (one clean PR containing feature + patch commits)
+8. **Merge & update ROADMAP** — mark phase complete, record learnings
+
+> **Note (Phase 1 correction):** Phase 1 incorrectly merged `phase-1-auth` and `phase-1-patch`
+> as two separate PRs directly into main. From Phase 2 onward the patch is rebased onto the
+> feature branch first, resulting in a single PR per phase.
 
 ---
 
@@ -94,16 +103,22 @@
 
 ---
 
-## Phase 2 — Notebook & Content Management
+## Phase 2 — Notebook & Content Management ✅
 **Goal:** CRUD for notebooks, sources (file upload), and notes; stored in MySQL; files on disk (Docker volume).
 
-- [ ] MySQL schema: `notebooks`, `sources`, `notes`, `chat_sessions` tables
-- [ ] BE server: REST endpoints for notebooks, sources (file upload), notes
-- [ ] RAG server: `POST /ingest` — accept file bytes, persist to ArangoDB raw document collection (no chunking yet)
-- [ ] Frontend: Notebook list, notebook detail, source upload, note editor (markdown)
-- [ ] File storage: Docker named volume mounted to both be-server and rag-server
+- [x] MySQL schema: `notebooks`, `sources`, `notes`, `chat_sessions` tables
+- [x] BE server: REST endpoints for notebooks, sources (file upload), notes
+- [x] RAG server: `POST /ingest` + `DELETE /documents/:id`, guarded by `X-Internal-Secret`
+- [x] Frontend: Notebook list, notebook detail, source upload, note editor
+- [x] File storage: Docker named volume mounted to both be-server and rag-server
 
 **Deliverable:** Create a notebook, upload a PDF, write a note — all persisted and visible in the UI.
+
+**Learnings:**
+- Fire-and-forget background tasks must use `IServiceScopeFactory` for a fresh `DbContext` scope.
+- DB record should be written before the file (avoids orphaned files on DB failure).
+- All inter-service endpoints need an `INTERNAL_SECRET` header to prevent unauthenticated access.
+- MIME allowlist on upload prevents arbitrary file types; allowlist currently: PDF, text, markdown, CSV, JSON, DOCX.
 
 ---
 
