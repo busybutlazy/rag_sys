@@ -12,9 +12,9 @@ public class RagClient(HttpClient http, IConfiguration config)
             req.Headers.Add("X-Internal-Secret", InternalSecret);
     }
 
-    public async Task IngestAsync(string sourceId, string filePath, string mimeType)
+    public async Task IngestAsync(string sourceId, string notebookId, string filePath, string mimeType)
     {
-        var payload = new { source_id = sourceId, file_path = filePath, mime_type = mimeType };
+        var payload = new { source_id = sourceId, notebook_id = notebookId, file_path = filePath, mime_type = mimeType };
         var req = new HttpRequestMessage(HttpMethod.Post, "/ingest")
         {
             Content = JsonContent.Create(payload)
