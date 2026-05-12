@@ -32,4 +32,24 @@ public class RagClient(HttpClient http, IConfiguration config)
         if (!response.IsSuccessStatusCode && response.StatusCode != System.Net.HttpStatusCode.NotFound)
             response.EnsureSuccessStatusCode();
     }
+
+    public async Task<string> SearchAsync(string query, string notebookId, string mode, int topK)
+    {
+        var url = $"/search/{mode}?q={Uri.EscapeDataString(query)}&notebook_id={notebookId}&top_k={topK}";
+        var req = new HttpRequestMessage(HttpMethod.Get, url);
+        AddSecret(req);
+        var response = await http.SendAsync(req);
+        response.EnsureSuccessStatusCode();
+        return await response.Content.ReadAsStringAsync();
+    }
+
+    public async Task<string> BenchmarkAsync(string query, string notebookId, int topK)
+    {
+        var url = $"/search/benchmark?q={Uri.EscapeDataString(query)}&notebook_id={notebookId}&top_k={topK}";
+        var req = new HttpRequestMessage(HttpMethod.Get, url);
+        AddSecret(req);
+        var response = await http.SendAsync(req);
+        response.EnsureSuccessStatusCode();
+        return await response.Content.ReadAsStringAsync();
+    }
 }

@@ -16,3 +16,10 @@ class ChunkResult(BaseModel):
 
 class SearchResponse(BaseModel):
     results: list[ChunkResult]
+
+
+class BenchmarkResponse(BaseModel):
+    query: str
+    vector: list[ChunkResult]
+    bm25: list[ChunkResult]
+    hybrid: list[ChunkResult]
