@@ -141,18 +141,28 @@
 
 ---
 
-## Phase 4 — RAG Pipeline (Vector Search)
+## Phase 4 — RAG Pipeline (Vector Search) ✅
 **Goal:** Ingest → chunk → embed → store in ArangoDB; vector similarity search endpoint.
 
-- [ ] Chunking strategy: recursive character splitter, configurable `chunk_size` / `chunk_overlap`
-- [ ] Embedding: OpenAI `text-embedding-3-small` via LLM Gateway
-- [ ] ArangoDB: `chunks` collection with `embedding` field; `vector_index` (HNSW)
-- [ ] RAG server: `POST /ingest` triggers chunking + embedding pipeline (async background task)
-- [ ] RAG server: `GET /search/vector?q=...&top_k=5&notebook_id=...` → ranked chunks
-- [ ] AI server: augment chat prompt with retrieved chunks (basic RAG flow)
-- [ ] Frontend: chat panel shows "sources cited" panel
+- [x] Chunking: sliding-window character splitter (`chunk_size=800`, `chunk_overlap=100`)
+- [x] Text extraction: PDF (`pypdf`), DOCX (`python-docx`), plain text / JSON / CSV / Markdown
+- [x] Embedding: OpenAI `text-embedding-3-small` (1536 dims), batched `embed_batch`
+- [x] ArangoDB: `chunks` collection with HNSW vector index (`metric=cosine`, `dimension=1536`)
+- [x] RAG server: `POST /ingest` — extract → chunk → embed → store; status tracked in `documents` collection
+- [x] RAG server: `GET /search/vector?q=&notebook_id=&top_k=` — AQL `APPROX_NEAR_COSINE` search
+- [x] RAG server: `DELETE /documents/{id}` also removes all associated chunks
+- [x] AI server: `rag_client.py` + context injection as system message when `notebook_id` present
+- [x] AI server: emits `data: {"sources": [...]}` SSE event before token stream
+- [x] Frontend: ChatPanel shows collapsible "N sources cited" under assistant messages
+- [x] `IngestRequest` includes `notebook_id` so chunks are scoped per notebook
 
 **Deliverable:** Ask a question about an uploaded document and get a grounded answer.
+
+**Learnings:**
+- `_check_secret` must be fail-closed: always compare; raise `SystemExit` at startup if secret unset (SEC-01).
+- Chunks need `notebook_id` on every document for per-notebook AQL filtering; add it to `IngestRequest` and thread it through be-server → rag-server.
+- `delete_chunks` must run before `store_chunks` on re-ingest, and on `DELETE /documents` — otherwise stale chunks accumulate in ArangoDB.
+- Two separate GitHub PRs per phase (`phase-N-xxx` → main, then `phase-N-patch` → main) keeps PR history clean with no cross-phase noise.
 
 ---
 
