@@ -43,7 +43,7 @@ services:
     networks:
       - rag_net
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8529/_api/version"]
+      test: ["CMD-SHELL", "bash -c 'exec 3<>/dev/tcp/127.0.0.1/8529' 2>/dev/null"]
       interval: 15s
       timeout: 10s
       retries: 10
