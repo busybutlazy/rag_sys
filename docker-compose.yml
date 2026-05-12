@@ -1,0 +1,129 @@
+name: rag-sys
+
+networks:
+  rag_net:
+    driver: bridge
+
+volumes:
+  mysql_data:
+  arango_data:
+  uploads:
+
+services:
+
+  # ── Databases ───────────────────────────────────
+  mysql:
+    image: mysql:8.0
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+      MYSQL_DATABASE: ${MYSQL_DATABASE}
+      MYSQL_USER: ${MYSQL_USER}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD}
+    volumes:
+      - mysql_data:/var/lib/mysql
+      - ./db/mysql:/docker-entrypoint-initdb.d:ro
+    networks:
+      - rag_net
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-p${MYSQL_ROOT_PASSWORD}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  arangodb:
+    image: arangodb:3.12
+    environment:
+      ARANGO_ROOT_PASSWORD: ${ARANGO_ROOT_PASSWORD}
+    volumes:
+      - arango_data:/var/lib/arangodb3
+      - ./db/arango:/docker-entrypoint-initdb.d:ro
+    networks:
+      - rag_net
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8529/_api/version"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ── Application Services ─────────────────────────
+  be-server:
+    build:
+      context: ./be-server
+      dockerfile: Dockerfile
+    environment:
+      ASPNETCORE_ENVIRONMENT: Development
+      ASPNETCORE_URLS: http://+:8001
+      DB_HOST: mysql
+      DB_PORT: 3306
+      DB_NAME: ${MYSQL_DATABASE}
+      DB_USER: ${MYSQL_USER}
+      DB_PASSWORD: ${MYSQL_PASSWORD}
+      JWT_SECRET: ${JWT_SECRET}
+    networks:
+      - rag_net
+    depends_on:
+      mysql:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8001/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  ai-server:
+    build:
+      context: ./ai-server
+      dockerfile: Dockerfile
+    environment:
+      OPENAI_API_KEY: ${OPENAI_API_KEY}
+      RAG_SERVER_URL: http://rag-server:8003
+    networks:
+      - rag_net
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8002/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  rag-server:
+    build:
+      context: ./rag-server
+      dockerfile: Dockerfile
+    environment:
+      ARANGO_URL: http://arangodb:8529
+      ARANGO_DB: ${ARANGO_DB}
+      ARANGO_USER: ${ARANGO_USER}
+      ARANGO_PASSWORD: ${ARANGO_PASSWORD}
+      OPENAI_API_KEY: ${OPENAI_API_KEY}
+    volumes:
+      - uploads:/app/uploads
+    networks:
+      - rag_net
+    depends_on:
+      arangodb:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8003/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      args:
+        VITE_BE_API_URL: /api
+        VITE_AI_API_URL: /ai
+    ports:
+      - "${FRONTEND_PORT:-5987}:80"
+    networks:
+      - rag_net
+    depends_on:
+      - be-server
+      - ai-server
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:80"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
