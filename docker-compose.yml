@@ -34,6 +34,9 @@ services:
     image: arangodb:3.12
     environment:
       ARANGO_ROOT_PASSWORD: ${ARANGO_ROOT_PASSWORD}
+      ARANGO_DB: ${ARANGO_DB}
+      ARANGO_USER: ${ARANGO_USER}
+      ARANGO_PASSWORD: ${ARANGO_PASSWORD}
     volumes:
       - arango_data:/var/lib/arangodb3
       - ./db/arango:/docker-entrypoint-initdb.d:ro
@@ -41,9 +44,10 @@ services:
       - rag_net
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8529/_api/version"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
+      interval: 15s
+      timeout: 10s
+      retries: 10
+      start_period: 30s
 
   # ── Application Services ─────────────────────────
   be-server:
