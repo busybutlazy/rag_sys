@@ -10,8 +10,12 @@ function AppRoutes() {
   const [checked, setChecked] = useState(false)
 
   useEffect(() => {
-    // Attempt silent token refresh on app load using the httpOnly cookie
-    refresh().finally(() => setChecked(true))
+    // Silent refresh — falls through to login if cookie is absent or server returns non-200
+    // Note: /api/auth/refresh returns 501 until Phase 2 adds the refresh_tokens table;
+    // users must log in manually on each session until then.
+    const controller = new AbortController()
+    const id = setTimeout(() => controller.abort(), 5000)
+    refresh().finally(() => { clearTimeout(id); setChecked(true) })
   }, [refresh])
 
   if (!checked) return null // prevent flash of login page while checking session

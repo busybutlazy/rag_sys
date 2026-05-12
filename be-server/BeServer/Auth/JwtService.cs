@@ -8,8 +8,18 @@ namespace BeServer.Auth;
 
 public class JwtService(IConfiguration config)
 {
-    private readonly string _secret = config["JWT_SECRET"]
-        ?? throw new InvalidOperationException("JWT_SECRET not configured");
+    private static readonly JwtSecurityTokenHandler Handler = new();
+
+    private readonly string _secret = ValidateSecret(
+        config["JWT_SECRET"] ?? throw new InvalidOperationException("JWT_SECRET not configured"));
+
+    private static string ValidateSecret(string secret)
+    {
+        if (secret.Length < JwtConstants.MinSecretLength)
+            throw new InvalidOperationException(
+                $"JWT_SECRET must be at least {JwtConstants.MinSecretLength} characters.");
+        return secret;
+    }
 
     public string GenerateAccessToken(string userId, string username)
     {
@@ -24,13 +34,13 @@ public class JwtService(IConfiguration config)
         };
 
         var token = new JwtSecurityToken(
-            issuer: "rag-sys",
-            audience: "rag-sys-frontend",
+            issuer: JwtConstants.Issuer,
+            audience: JwtConstants.Audience,
             claims: claims,
             expires: DateTime.UtcNow.AddMinutes(15),
             signingCredentials: creds);
 
-        return new JwtSecurityTokenHandler().WriteToken(token);
+        return Handler.WriteToken(token);
     }
 
     public string GenerateRefreshToken() =>
@@ -38,15 +48,14 @@ public class JwtService(IConfiguration config)
 
     public ClaimsPrincipal? ValidateAccessToken(string token)
     {
-        var handler = new JwtSecurityTokenHandler();
         try
         {
-            return handler.ValidateToken(token, new TokenValidationParameters
+            return Handler.ValidateToken(token, new TokenValidationParameters
             {
                 ValidateIssuer = true,
-                ValidIssuer = "rag-sys",
+                ValidIssuer = JwtConstants.Issuer,
                 ValidateAudience = true,
-                ValidAudience = "rag-sys-frontend",
+                ValidAudience = JwtConstants.Audience,
                 ValidateIssuerSigningKey = true,
                 IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(_secret)),
                 ValidateLifetime = true,
