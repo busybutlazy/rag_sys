@@ -75,17 +75,22 @@
 
 ---
 
-## Phase 1 — Authentication & User Management
+## Phase 1 — Authentication & User Management ✅
 **Goal:** JWT-based login; single user from `.env`; SQL schema ready for multi-user.
 
-- [ ] MySQL schema: `users` table (id CHAR(36), username, hashed_password, created_at)
-- [ ] BE server: `POST /api/auth/login` → JWT access token + refresh token
-- [ ] BE server: auth middleware — Bearer token validation on all protected routes
-- [ ] Frontend: Login page → stores JWT in memory (not localStorage), refresh via httpOnly cookie
-- [ ] Frontend: Protected route wrapper
-- [ ] Single user bootstrapped from `.env` on first startup (idempotent seed)
+- [x] MySQL schema: `users` table (id CHAR(36), username, hashed_password, created_at)
+- [x] BE server: `POST /api/auth/login` → JWT access token + httpOnly refresh cookie
+- [x] BE server: JWT middleware — Bearer token validation via `AddAuthentication`
+- [x] Frontend: Login page → stores JWT in memory (AuthContext), httpOnly refresh cookie
+- [x] Frontend: Protected route wrapper (`ProtectedRoute.tsx`)
+- [x] Single user bootstrapped from `.env` on first startup (idempotent seed)
 
 **Deliverable:** Login flow works end-to-end.
+
+**Learnings:**
+- `/api/auth/refresh` is stubbed as 501 until Phase 2-ish adds a `refresh_tokens` table — users must re-login each session for now.
+- `ASPNETCORE_ENVIRONMENT` is now parameterized; set to `Production` in real deployments.
+- BCrypt work factor 12, constant-time login (always verify to prevent username enumeration).
 
 ---
 
