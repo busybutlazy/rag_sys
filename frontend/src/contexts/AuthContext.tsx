@@ -21,8 +21,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [])
 
   const logout = useCallback(async () => {
-    await fetch('/api/auth/logout', { method: 'POST', credentials: 'include' })
-    setAuth({ accessToken: null, username: null })
+    try {
+      await fetch('/api/auth/logout', { method: 'POST', credentials: 'include' })
+    } finally {
+      setAuth({ accessToken: null, username: null })
+    }
   }, [])
 
   const refresh = useCallback(async (): Promise<boolean> => {

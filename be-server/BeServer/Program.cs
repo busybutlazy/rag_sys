@@ -16,12 +16,17 @@ var connStr =
     $"User={builder.Configuration["DB_USER"] ?? "raguser"};" +
     $"Password={builder.Configuration["DB_PASSWORD"] ?? "ragpass"};";
 
+// Pinned version avoids a live DB call during DI registration (SEC-06)
 builder.Services.AddDbContext<AppDbContext>(opt =>
-    opt.UseMySql(connStr, ServerVersion.AutoDetect(connStr)));
+    opt.UseMySql(connStr, new MySqlServerVersion(new Version(8, 0, 0))));
 
 // ── JWT ──────────────────────────────────────────
 var jwtSecret = builder.Configuration["JWT_SECRET"]
     ?? throw new InvalidOperationException("JWT_SECRET is required");
+
+if (jwtSecret.Length < JwtConstants.MinSecretLength)
+    throw new InvalidOperationException(
+        $"JWT_SECRET must be at least {JwtConstants.MinSecretLength} characters.");
 
 builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
     .AddJwtBearer(opt =>
@@ -29,9 +34,9 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
         opt.TokenValidationParameters = new TokenValidationParameters
         {
             ValidateIssuer = true,
-            ValidIssuer = "rag-sys",
+            ValidIssuer = JwtConstants.Issuer,
             ValidateAudience = true,
-            ValidAudience = "rag-sys-frontend",
+            ValidAudience = JwtConstants.Audience,
             ValidateIssuerSigningKey = true,
             IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtSecret)),
             ValidateLifetime = true,
@@ -80,7 +85,7 @@ static async Task SeedAdminUser(AppDbContext db, IConfiguration config)
         db.Users.Add(new User
         {
             Username = username,
-            PasswordHash = BCrypt.Net.BCrypt.HashPassword(password),
+            PasswordHash = BCrypt.Net.BCrypt.HashPassword(password, workFactor: 12),
         });
         await db.SaveChangesAsync();
     }
