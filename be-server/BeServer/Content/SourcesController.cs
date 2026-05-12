@@ -22,6 +22,7 @@ public class SourcesController(
         "application/pdf",
         "text/plain",
         "text/markdown",
+        "text/x-markdown",
         "text/csv",
         "application/json",
         "application/msword",
