@@ -122,16 +122,22 @@
 
 ---
 
-## Phase 3 — LLM Gateway & AI Server
+## Phase 3 — LLM Gateway & AI Server ✅
 **Goal:** Thin gateway abstraction over OpenAI; AI server exposes a chat-completion endpoint; no RAG context yet.
 
-- [ ] LLM Gateway interface: `complete(messages, model, stream) → AsyncIterator[str]`
-- [ ] OpenAI provider implementation
-- [ ] AI server: `POST /chat/completions` — proxies through gateway, supports SSE streaming
-- [ ] Frontend: Chat panel — sends messages, renders streamed response
-- [ ] Configuration: model name + API key from `.env` via gateway config
+- [x] LLM Gateway interface: `LLMGateway` ABC with `stream_complete(messages, model) → AsyncGenerator[str, None]`
+- [x] OpenAI provider implementation (`AsyncOpenAI`, `stream=True`)
+- [x] AI server: `POST /chat/completions` — JWT-guarded, SSE streaming with `[DONE]` sentinel and error envelope
+- [x] Frontend: ChatPanel — SSE streaming, stop button, blinking cursor, auto-scroll
+- [x] Configuration: model name from request, API key + JWT_SECRET from `.env`
 
 **Deliverable:** Chat with the LLM from the UI without RAG context.
+
+**Learnings:**
+- ai-server validates the same JWT (issuer/audience) as be-server — ensures tokens can't be used cross-service without the shared secret.
+- `JWT_SECRET` startup guard (SEC-01 from review) catches misconfiguration immediately; match this pattern in every service that holds a signing secret.
+- SSE buffer accumulation (`buf = lines.pop()`) is required to handle chunks that split across `data:` lines.
+- `notebook_id` is reserved on `ChatRequest` (nullable, unused until Phase 4 RAG injection).
 
 ---
 
