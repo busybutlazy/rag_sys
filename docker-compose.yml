@@ -84,6 +84,7 @@ services:
     environment:
       OPENAI_API_KEY: ${OPENAI_API_KEY}
       JWT_SECRET: ${JWT_SECRET}
+      INTERNAL_SECRET: ${INTERNAL_SECRET}
       RAG_SERVER_URL: http://rag-server:8003
     networks:
       - rag_net

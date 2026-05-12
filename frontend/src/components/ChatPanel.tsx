@@ -3,6 +3,7 @@ import { useRef, useState } from 'react'
 interface ChatMessage {
   role: 'user' | 'assistant'
   content: string
+  sources?: { source_id: string; chunk_index: number }[]
 }
 
 interface Props {
@@ -52,9 +53,7 @@ export default function ChatPanel({ notebookId, getToken }: Props) {
         }),
       })
 
-      if (!res.ok) {
-        throw new Error(`HTTP ${res.status}`)
-      }
+      if (!res.ok) throw new Error(`HTTP ${res.status}`)
 
       const reader = res.body!.getReader()
       const decoder = new TextDecoder()
@@ -77,6 +76,13 @@ export default function ChatPanel({ notebookId, getToken }: Props) {
             if (parsed.error) {
               setError(parsed.error)
               break
+            }
+            if (parsed.sources) {
+              setMessages(prev => {
+                const next = [...prev]
+                next[assistantIdx] = { ...next[assistantIdx], sources: parsed.sources }
+                return next
+              })
             }
             if (parsed.token) {
               setMessages(prev => {
@@ -110,13 +116,13 @@ export default function ChatPanel({ notebookId, getToken }: Props) {
   }
 
   return (
-    <div className="flex flex-col h-96 border rounded-lg overflow-hidden">
+    <div className="flex flex-col h-[28rem] border rounded-lg overflow-hidden">
       <div className="flex-1 overflow-y-auto p-4 space-y-3 bg-gray-50">
         {messages.length === 0 && (
           <p className="text-sm text-gray-400 text-center mt-8">Ask anything about this notebook…</p>
         )}
         {messages.map((m, i) => (
-          <div key={i} className={`flex ${m.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+          <div key={i} className={`flex flex-col ${m.role === 'user' ? 'items-end' : 'items-start'}`}>
             <div
               className={`max-w-[80%] rounded-lg px-3 py-2 text-sm whitespace-pre-wrap break-words ${
                 m.role === 'user'
@@ -126,11 +132,23 @@ export default function ChatPanel({ notebookId, getToken }: Props) {
             >
               {m.content || (streaming && m.role === 'assistant' ? <span className="animate-pulse">▋</span> : '')}
             </div>
+            {m.role === 'assistant' && m.sources && m.sources.length > 0 && (
+              <details className="mt-1 text-xs text-gray-500 max-w-[80%]">
+                <summary className="cursor-pointer hover:text-gray-700">
+                  {m.sources.length} source{m.sources.length > 1 ? 's' : ''} cited
+                </summary>
+                <ul className="mt-1 space-y-0.5 pl-2">
+                  {m.sources.map((s, si) => (
+                    <li key={si} className="font-mono truncate">
+                      {s.source_id.slice(0, 8)}… chunk {s.chunk_index}
+                    </li>
+                  ))}
+                </ul>
+              </details>
+            )}
           </div>
         ))}
-        {error && (
-          <p className="text-xs text-red-500 text-center">{error}</p>
-        )}
+        {error && <p className="text-xs text-red-500 text-center">{error}</p>}
         <div ref={bottomRef} />
       </div>
 

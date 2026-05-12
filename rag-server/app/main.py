@@ -1,23 +1,30 @@
 import os
-from fastapi import FastAPI, HTTPException, Header
+from contextlib import asynccontextmanager
+from fastapi import FastAPI, HTTPException, Header, Query
 from app.db import get_db
-from app.models import IngestRequest
+from app.models import IngestRequest, SearchResponse
+from app import chunker, embedder, vector_store
 
-app = FastAPI(title="RAG Server", version="0.1.0")
-
-# SEC-04: simple shared secret between be-server and rag-server (internal network only)
 _INTERNAL_SECRET = os.environ.get("INTERNAL_SECRET", "")
 
 
-def _check_secret(x_internal_secret: str | None):
+def _check_secret(x_internal_secret: str | None) -> None:
     if _INTERNAL_SECRET and x_internal_secret != _INTERNAL_SECRET:
         raise HTTPException(status_code=403, detail="Forbidden")
 
 
+@asynccontextmanager
+async def lifespan(_: FastAPI):
+    vector_store.ensure_vector_index(get_db())
+    yield
+
+
+app = FastAPI(title="RAG Server", version="0.1.0", lifespan=lifespan)
+
+
 @app.get("/health")
 async def health():
-    db = get_db()
-    db.version()
+    get_db().version()
     return {"status": "ok", "service": "rag-server"}
 
 
@@ -32,22 +39,55 @@ async def ingest(
         raise HTTPException(status_code=404, detail=f"File not found: {req.file_path}")
 
     db = get_db()
-    documents = db.collection("documents")
+    documents = db.collection("chunks")  # use chunks collection for doc tracking too? No — keep documents collection
+    docs_col = db.collection("documents")
 
-    doc = {
+    # Upsert document record as "processing"
+    doc_record = {
         "_key": req.source_id,
         "source_id": req.source_id,
+        "notebook_id": req.notebook_id,
         "file_path": req.file_path,
         "mime_type": req.mime_type,
-        "status": "stored",
+        "status": "processing",
     }
-
-    if documents.has(req.source_id):
-        documents.update(doc)
+    if docs_col.has(req.source_id):
+        docs_col.update(doc_record)
     else:
-        documents.insert(doc)
+        docs_col.insert(doc_record)
 
-    return {"source_id": req.source_id, "status": "stored"}
+    try:
+        text = chunker.extract_text(req.file_path, req.mime_type)
+        chunks = chunker.chunk_text(text)
+        if not chunks:
+            raise ValueError("No text extracted from file")
+
+        embeddings = await embedder.embed_batch(chunks)
+
+        # Remove old chunks for this source before inserting new ones
+        vector_store.delete_chunks(db, req.source_id)
+        vector_store.store_chunks(db, req.source_id, req.notebook_id, chunks, embeddings)
+
+        docs_col.update({"_key": req.source_id, "status": "ready", "chunk_count": len(chunks)})
+        return {"source_id": req.source_id, "status": "ready", "chunk_count": len(chunks)}
+
+    except Exception as exc:
+        docs_col.update({"_key": req.source_id, "status": "error", "error": str(exc)})
+        raise HTTPException(status_code=500, detail=str(exc))
+
+
+@app.get("/search/vector", response_model=SearchResponse)
+async def search_vector(
+    q: str = Query(..., description="Query text"),
+    notebook_id: str = Query(..., description="Notebook to search within"),
+    top_k: int = Query(default=5, ge=1, le=20),
+    x_internal_secret: str | None = Header(default=None),
+):
+    _check_secret(x_internal_secret)
+
+    query_embedding = await embedder.embed(q)
+    results = vector_store.search_vector(get_db(), query_embedding, notebook_id, top_k)
+    return SearchResponse(results=results)
 
 
 @app.delete("/documents/{source_id}", status_code=204)
@@ -57,6 +97,7 @@ async def delete_document(
 ):
     _check_secret(x_internal_secret)
     db = get_db()
-    documents = db.collection("documents")
-    if documents.has(source_id):
-        documents.delete(source_id)
+    vector_store.delete_chunks(db, source_id)
+    docs_col = db.collection("documents")
+    if docs_col.has(source_id):
+        docs_col.delete(source_id)
