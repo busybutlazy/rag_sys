@@ -46,13 +46,22 @@
 ## Phase Workflow (every phase follows this sequence)
 
 1. **Plan** — detailed implementation plan written to `docs/superpowers/plans/`
-2. **Branch** — `git checkout -b phase-N-<short-name>`
-3. **Implement** — follow the plan task by task
-4. **PR → main** — open pull request, merge
-5. **Code Review** — agent writes `docs/reviews/phase-N-review.md` (security / performance / maintainability / logic)
-6. **Patch branch** — `git checkout -b phase-N-patch`
-7. **Patch PR → main** — apply review fixes, merge
-8. **Update ROADMAP** — mark phase complete, record learnings
+2. **Branch** — `git checkout -b phase-N-<short-name>` from `main`
+3. **Implement** — follow the plan task by task, commit on the feature branch
+4. **Code Review** — agent writes `docs/reviews/phase-N-review.md` (security / performance / maintainability / logic)
+5. **Patch branch** — `git checkout -b phase-N-patch` **from `phase-N-<short-name>`** (NOT from main)
+6. **Apply fixes** on `phase-N-patch`, then **rebase back onto `phase-N-<short-name>`**:
+   ```
+   git rebase phase-N-<short-name>
+   git checkout phase-N-<short-name>
+   git merge --ff-only phase-N-patch
+   ```
+7. **Single PR** — `phase-N-<short-name>` → `main` (one clean PR containing feature + patch commits)
+8. **Merge & update ROADMAP** — mark phase complete, record learnings
+
+> **Note (Phase 1 correction):** Phase 1 incorrectly merged `phase-1-auth` and `phase-1-patch`
+> as two separate PRs directly into main. From Phase 2 onward the patch is rebased onto the
+> feature branch first, resulting in a single PR per phase.
 
 ---
 
