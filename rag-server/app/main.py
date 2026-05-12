@@ -6,10 +6,12 @@ from app.models import IngestRequest, SearchResponse
 from app import chunker, embedder, vector_store
 
 _INTERNAL_SECRET = os.environ.get("INTERNAL_SECRET", "")
+if not _INTERNAL_SECRET:
+    raise SystemExit("INTERNAL_SECRET must be set")
 
 
 def _check_secret(x_internal_secret: str | None) -> None:
-    if _INTERNAL_SECRET and x_internal_secret != _INTERNAL_SECRET:
+    if x_internal_secret != _INTERNAL_SECRET:
         raise HTTPException(status_code=403, detail="Forbidden")
 
 
@@ -39,7 +41,6 @@ async def ingest(
         raise HTTPException(status_code=404, detail=f"File not found: {req.file_path}")
 
     db = get_db()
-    documents = db.collection("chunks")  # use chunks collection for doc tracking too? No — keep documents collection
     docs_col = db.collection("documents")
 
     # Upsert document record as "processing"
