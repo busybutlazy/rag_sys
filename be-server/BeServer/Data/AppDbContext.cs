@@ -10,6 +10,10 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
     public DbSet<Source> Sources { get; set; } = null!;
     public DbSet<Note> Notes { get; set; } = null!;
     public DbSet<ChatSession> ChatSessions { get; set; } = null!;
+    public DbSet<ChatMessage> ChatMessages { get; set; } = null!;
+    public DbSet<ChatRequest> ChatRequests { get; set; } = null!;
+    public DbSet<RequestLog> RequestLogs { get; set; } = null!;
+    public DbSet<SessionTask> SessionTasks { get; set; } = null!;
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -81,6 +85,11 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             e.Property(cs => cs.UserId).HasMaxLength(36).IsRequired();
             e.Property(cs => cs.NotebookId).HasMaxLength(36).IsRequired();
             e.Property(cs => cs.Title).HasMaxLength(512);
+            e.Property(cs => cs.Mode).HasMaxLength(32).HasDefaultValue("chat");
+            e.Property(cs => cs.SessionStateJson).HasColumnType("json");
+            e.Property(cs => cs.ActiveTaskId).HasMaxLength(36);
+            e.Property(cs => cs.Archived).HasDefaultValue(false);
+            e.Property(cs => cs.LastMessageAt).HasColumnType("datetime");
             e.Property(cs => cs.CreatedAt).HasColumnType("datetime");
             e.Property(cs => cs.UpdatedAt).HasColumnType("datetime");
             e.HasOne(cs => cs.User).WithMany().HasForeignKey(cs => cs.UserId).OnDelete(DeleteBehavior.Cascade);
@@ -88,6 +97,89 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             e.HasIndex(cs => cs.UserId);
             e.HasIndex(cs => cs.NotebookId);
             e.HasIndex(cs => new { cs.UserId, cs.NotebookId });
+        });
+
+        modelBuilder.Entity<ChatMessage>(e =>
+        {
+            e.HasKey(m => m.Id);
+            e.Property(m => m.Id).HasMaxLength(36);
+            e.Property(m => m.SessionId).HasMaxLength(36).IsRequired();
+            e.Property(m => m.UserId).HasMaxLength(36).IsRequired();
+            e.Property(m => m.NotebookId).HasMaxLength(36).IsRequired();
+            e.Property(m => m.Role).HasMaxLength(16).IsRequired();
+            e.Property(m => m.Content).HasColumnType("longtext");
+            e.Property(m => m.ContentPreview).HasMaxLength(150).IsRequired();
+            e.Property(m => m.RequestId).HasMaxLength(36);
+            e.Property(m => m.SourcesJson).HasColumnType("json");
+            e.Property(m => m.TracesJson).HasColumnType("json");
+            e.Property(m => m.MetadataJson).HasColumnType("json");
+            e.Property(m => m.CreatedAt).HasColumnType("datetime");
+            e.HasOne(m => m.Session).WithMany(s => s.Messages).HasForeignKey(m => m.SessionId).OnDelete(DeleteBehavior.Cascade);
+            e.HasOne(m => m.User).WithMany().HasForeignKey(m => m.UserId).OnDelete(DeleteBehavior.Cascade);
+            e.HasOne(m => m.Notebook).WithMany().HasForeignKey(m => m.NotebookId).OnDelete(DeleteBehavior.Cascade);
+            e.HasIndex(m => m.SessionId);
+            e.HasIndex(m => new { m.SessionId, m.Sequence }).IsUnique();
+            e.HasIndex(m => new { m.UserId, m.NotebookId });
+        });
+
+        modelBuilder.Entity<ChatRequest>(e =>
+        {
+            e.HasKey(r => r.Id);
+            e.Property(r => r.Id).HasMaxLength(36);
+            e.Property(r => r.SessionId).HasMaxLength(36).IsRequired();
+            e.Property(r => r.UserMessageId).HasMaxLength(36);
+            e.Property(r => r.AssistantMessageId).HasMaxLength(36);
+            e.Property(r => r.Mode).HasMaxLength(32).IsRequired();
+            e.Property(r => r.Model).HasMaxLength(128).IsRequired();
+            e.Property(r => r.Status).HasMaxLength(32).IsRequired();
+            e.Property(r => r.ContextSnapshotJson).HasColumnType("json");
+            e.Property(r => r.Error).HasColumnType("text");
+            e.Property(r => r.StartedAt).HasColumnType("datetime");
+            e.Property(r => r.CompletedAt).HasColumnType("datetime");
+            e.HasOne(r => r.Session).WithMany(s => s.Requests).HasForeignKey(r => r.SessionId).OnDelete(DeleteBehavior.Cascade);
+            e.HasIndex(r => r.SessionId);
+            e.HasIndex(r => r.UserMessageId);
+        });
+
+        modelBuilder.Entity<RequestLog>(e =>
+        {
+            e.HasKey(l => l.Id);
+            e.Property(l => l.Id).HasMaxLength(36);
+            e.Property(l => l.ChatRequestId).HasMaxLength(36);
+            e.Property(l => l.SessionId).HasMaxLength(36);
+            e.Property(l => l.Direction).HasMaxLength(32).IsRequired();
+            e.Property(l => l.Service).HasMaxLength(64).IsRequired();
+            e.Property(l => l.Operation).HasMaxLength(128).IsRequired();
+            e.Property(l => l.Method).HasMaxLength(16);
+            e.Property(l => l.Url).HasMaxLength(2048);
+            e.Property(l => l.RequestJson).HasColumnType("json");
+            e.Property(l => l.ResponseJson).HasColumnType("json");
+            e.Property(l => l.Error).HasColumnType("text");
+            e.Property(l => l.CreatedAt).HasColumnType("datetime");
+            e.HasOne(l => l.ChatRequest).WithMany(r => r.Logs).HasForeignKey(l => l.ChatRequestId).OnDelete(DeleteBehavior.SetNull);
+            e.HasOne(l => l.Session).WithMany().HasForeignKey(l => l.SessionId).OnDelete(DeleteBehavior.SetNull);
+            e.HasIndex(l => l.ChatRequestId);
+            e.HasIndex(l => l.SessionId);
+            e.HasIndex(l => new { l.Service, l.Operation });
+        });
+
+        modelBuilder.Entity<SessionTask>(e =>
+        {
+            e.HasKey(t => t.Id);
+            e.Property(t => t.Id).HasMaxLength(36);
+            e.Property(t => t.SessionId).HasMaxLength(36).IsRequired();
+            e.Property(t => t.Title).HasMaxLength(512).IsRequired();
+            e.Property(t => t.Summary).HasColumnType("text");
+            e.Property(t => t.Status).HasMaxLength(32).IsRequired();
+            e.Property(t => t.StateJson).HasColumnType("json");
+            e.Property(t => t.CreatedFromRequestId).HasMaxLength(36);
+            e.Property(t => t.UpdatedFromRequestId).HasMaxLength(36);
+            e.Property(t => t.CreatedAt).HasColumnType("datetime");
+            e.Property(t => t.UpdatedAt).HasColumnType("datetime");
+            e.Property(t => t.CompletedAt).HasColumnType("datetime");
+            e.HasOne(t => t.Session).WithMany(s => s.Tasks).HasForeignKey(t => t.SessionId).OnDelete(DeleteBehavior.Cascade);
+            e.HasIndex(t => t.SessionId);
+            e.HasIndex(t => new { t.SessionId, t.Status });
         });
     }
 }

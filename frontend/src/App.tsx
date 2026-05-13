@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react'
 import { useAuth } from './hooks/useAuth'
 import { useAuthContext } from './contexts/AuthContext'
 import { registerTokenGetter } from './lib/api'
+import AppShell from './components/AppShell'
 import ProtectedRoute from './components/ProtectedRoute'
 import LoginPage from './pages/LoginPage'
 import DashboardPage from './pages/DashboardPage'
@@ -30,9 +31,9 @@ function AppRoutes() {
   return (
     <Routes>
       <Route path="/login" element={accessToken ? <Navigate to="/dashboard" replace /> : <LoginPage />} />
-      <Route path="/dashboard" element={<ProtectedRoute><DashboardPage /></ProtectedRoute>} />
-      <Route path="/notebooks" element={<ProtectedRoute><NotebooksPage /></ProtectedRoute>} />
-      <Route path="/notebooks/:id" element={<ProtectedRoute><NotebookDetailPage /></ProtectedRoute>} />
+      <Route path="/dashboard" element={<ProtectedRoute><AppShell><DashboardPage /></AppShell></ProtectedRoute>} />
+      <Route path="/notebooks" element={<ProtectedRoute><AppShell><NotebooksPage /></AppShell></ProtectedRoute>} />
+      <Route path="/notebooks/:id" element={<ProtectedRoute><AppShell><NotebookDetailPage /></AppShell></ProtectedRoute>} />
       <Route path="*" element={<Navigate to={accessToken ? '/dashboard' : '/login'} replace />} />
     </Routes>
   )

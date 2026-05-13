@@ -1,5 +1,6 @@
 import json
 import os
+import time
 from collections.abc import AsyncGenerator
 from typing import Any
 
@@ -83,12 +84,36 @@ async def stream_agent_events(
     ]
 
     for step in range(1, _MAX_STEPS + 1):
-        response = await _client.chat.completions.create(
-            model=req.model,
-            messages=messages,
-            tools=_TOOLS,
-            tool_choice="auto",
-        )
+        started = time.perf_counter()
+        try:
+            response = await _client.chat.completions.create(
+                model=req.model,
+                messages=messages,
+                tools=_TOOLS,
+                tool_choice="auto",
+            )
+            await be_client.log_request(
+                chat_request_id=req.request_id,
+                session_id=req.session_id,
+                service="openai",
+                operation="agent.step",
+                method="POST",
+                request_json={"model": req.model, "step": step, "message_count": len(messages)},
+                response_json={"tool_calls": len(response.choices[0].message.tool_calls or [])},
+                duration_ms=int((time.perf_counter() - started) * 1000),
+            )
+        except Exception as exc:
+            await be_client.log_request(
+                chat_request_id=req.request_id,
+                session_id=req.session_id,
+                service="openai",
+                operation="agent.step",
+                method="POST",
+                request_json={"model": req.model, "step": step, "message_count": len(messages)},
+                duration_ms=int((time.perf_counter() - started) * 1000),
+                error=str(exc),
+            )
+            raise
         message = response.choices[0].message
         messages.append(message.model_dump(exclude_none=True))
 
@@ -107,11 +132,23 @@ async def stream_agent_events(
                 }
             }
             try:
+                tool_started = time.perf_counter()
                 result = await _run_tool(name, args, req.notebook_id, authorization)
                 ok = True
             except Exception as exc:
                 result = {"error": str(exc)}
                 ok = False
+            await be_client.log_request(
+                chat_request_id=req.request_id,
+                session_id=req.session_id,
+                service=_tool_service(name),
+                operation=name,
+                method="CALL",
+                request_json={"arguments": args, "notebook_id": req.notebook_id},
+                response_json=_loggable_result(result),
+                duration_ms=int((time.perf_counter() - tool_started) * 1000),
+                error=None if ok else str(result.get("error")),
+            )
 
             yield {
                 "tool_result": {
@@ -135,15 +172,39 @@ async def stream_agent_events(
             "content": "Stop calling tools and provide the final answer from the gathered context.",
         }
     )
-    stream = await _client.chat.completions.create(
-        model=req.model,
-        messages=messages,
-        stream=True,
-    )
-    async for chunk in stream:
-        token = chunk.choices[0].delta.content
-        if token:
-            yield {"token": token}
+    started = time.perf_counter()
+    try:
+        stream = await _client.chat.completions.create(
+            model=req.model,
+            messages=messages,
+            stream=True,
+        )
+        async for chunk in stream:
+            token = chunk.choices[0].delta.content
+            if token:
+                yield {"token": token}
+        await be_client.log_request(
+            chat_request_id=req.request_id,
+            session_id=req.session_id,
+            service="openai",
+            operation="agent.final.stream",
+            method="POST",
+            request_json={"model": req.model, "message_count": len(messages), "stream": True},
+            response_json={"completed": True},
+            duration_ms=int((time.perf_counter() - started) * 1000),
+        )
+    except Exception as exc:
+        await be_client.log_request(
+            chat_request_id=req.request_id,
+            session_id=req.session_id,
+            service="openai",
+            operation="agent.final.stream",
+            method="POST",
+            request_json={"model": req.model, "message_count": len(messages), "stream": True},
+            duration_ms=int((time.perf_counter() - started) * 1000),
+            error=str(exc),
+        )
+        raise
 
 
 async def _run_tool(
@@ -223,3 +284,19 @@ def _summarize_result(result: Any) -> str:
         if "id" in result:
             return f"created {result['id']}"
     return "ok"
+
+
+def _tool_service(name: str) -> str:
+    if name in {"search_knowledge", "get_source_content"}:
+        return "rag-server"
+    if name in {"list_notebooks", "create_note"}:
+        return "be-server"
+    return "tool"
+
+
+def _loggable_result(result: Any) -> Any:
+    if isinstance(result, list):
+        return {"count": len(result), "preview": result[:3]}
+    if isinstance(result, dict) and "text" in result:
+        return {**result, "text": str(result["text"])[:1000]}
+    return result

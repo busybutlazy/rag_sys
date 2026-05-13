@@ -1,0 +1,516 @@
+@charset "UTF-8";
+/**
+ * 
+ * Name: Re Loop
+ * Author: Takumi Matsuyama × tanukie
+ * 
+ */
+html, body, main, div, section, article,
+header, footer, nav, h1, h2, h3, h4, h5, h6,
+ul, li, ol, table, tbody, tr, th, td,
+a, button, p, span, b, strong, small, blockquote,
+canvas, figure, picture, img, audio, video,
+form, label, input, select, textarea {
+  margin: 0;
+  padding: 0;
+  border: 0;
+  box-sizing: initial;
+  vertical-align: baseline;
+}
+
+html {
+  line-height: 1;
+  -webkit-text-size-adjust: 100%;
+}
+
+body {
+  margin: 0;
+}
+
+main {
+  display: block;
+}
+
+h1, h2, h3, h4, h5, h6 {
+  font-weight: normal;
+}
+
+ul, ol {
+  list-style: none;
+}
+
+a {
+  display: inline-block;
+  color: initial;
+  background-color: transparent;
+  text-decoration: none;
+}
+
+b,
+strong {
+  font-weight: bold;
+}
+
+small {
+  font-size: 90%;
+}
+
+img,
+video,
+iframe {
+  width: 100%;
+  height: auto;
+  object-fit: contain;
+  vertical-align: top;
+}
+
+button,
+input,
+optgroup,
+select,
+textarea {
+  font-family: inherit;
+  font-size: 100%;
+  line-height: 1.15;
+  color: initial;
+  outline: none;
+  text-align: left;
+  border-radius: 0;
+  -webkit-appearance: none;
+}
+
+button,
+input {
+  overflow: visible;
+}
+
+button,
+select {
+  text-transform: none;
+  background-color: transparent;
+}
+
+button,
+[type=button],
+[type=reset],
+[type=submit] {
+  cursor: pointer;
+}
+
+button::-moz-focus-inner,
+[type=button]::-moz-focus-inner,
+[type=reset]::-moz-focus-inner,
+[type=submit]::-moz-focus-inner {
+  border-style: none;
+  padding: 0;
+}
+
+[type=checkbox],
+[type=radio] {
+  box-sizing: border-box; /* 1 */
+  padding: 0; /* 2 */
+}
+
+[type=number]::-webkit-inner-spin-button,
+[type=number]::-webkit-outer-spin-button {
+  height: auto;
+}
+
+[type=search] {
+  -webkit-appearance: textfield; /* 1 */
+  outline-offset: -2px; /* 2 */
+}
+
+[type=search]::-webkit-search-decoration {
+  -webkit-appearance: none;
+}
+
+textarea {
+  resize: none;
+  overflow: auto;
+}
+
+[hidden] {
+  display: none;
+}
+
+html {
+  font-size: 0.6613756614vw;
+}
+html body {
+  position: relative;
+  overscroll-behavior: none;
+  -webkit-overscroll-behavior: none;
+}
+html body main {
+  position: relative;
+  overscroll-behavior: none;
+  -webkit-overscroll-behavior: none;
+}
+html.wf-loading, html.font-loading {
+  opacity: 0;
+  visibility: hidden;
+}
+@media only screen and (max-width: 860px) {
+  html {
+    height: -webkit-fill-available;
+    height: 100svh;
+    font-size: 2.5445292621vw;
+    overscroll-behavior: none;
+    -webkit-overscroll-behavior: none;
+  }
+}
+
+html, body {
+  background-color: #ffffff;
+}
+
+html.lenis,
+html.lenis body {
+  height: auto;
+}
+
+.lenis.lenis-smooth [data-lenis-prevent] {
+  overscroll-behavior: contain;
+}
+
+.lenis.lenis-smooth iframe {
+  pointer-events: none;
+}
+
+h1, h2, h3, h4, h5, h6, a, p, span, button, b, strong, figcaption, label, input, textarea, select, li, th, td {
+  font-family: "Albert Sans", "Zen Kaku Gothic Antique", -apple-system, sans-serif, system-ui;
+  font-size: 1.3rem;
+  font-size: 1.35rem;
+  line-height: 1.8;
+  letter-spacing: 0;
+  font-style: normal;
+  font-weight: 400;
+  color: #4F545A;
+  font-feature-settings: "palt" 1;
+  -webkit-font-feature-settings: "palt" 1;
+  font-smoothing: antialiased;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+h1:before, h1:after, h2:before, h2:after, h3:before, h3:after, h4:before, h4:after, h5:before, h5:after, h6:before, h6:after, a:before, a:after, p:before, p:after, span:before, span:after, button:before, button:after, b:before, b:after, strong:before, strong:after, figcaption:before, figcaption:after, label:before, label:after, input:before, input:after, textarea:before, textarea:after, select:before, select:after, li:before, li:after, th:before, th:after, td:before, td:after {
+  font-family: inherit;
+  font-size: inherit;
+  line-height: inherit;
+  font-weight: inherit;
+  font-feature-settings: "palt" 0;
+  -webkit-font-feature-settings: "palt" 0;
+}
+@media only screen and (max-width: 860px) {
+  h1, h2, h3, h4, h5, h6, a, p, span, button, b, strong, figcaption, label, input, textarea, select, li, th, td {
+    font-size: 1.2rem;
+    font-size: 1.3rem;
+  }
+}
+
+a, button {
+  display: inline-block;
+}
+a *, button * {
+  pointer-events: none;
+}
+
+p, p * {
+  font-feature-settings: "palt" 0;
+  -webkit-font-feature-settings: "palt" 0;
+  line-height: 1.8;
+}
+
+.en, .en * {
+  font-family: "Albert Sans", -apple-system, sans-serif, system-ui;
+}
+
+.exl, .exl * {
+  font-weight: 200;
+}
+
+.medium, .medium * {
+  font-weight: 500;
+}
+
+.bold, .bold *, b, b *, strong, strong * {
+  font-weight: bold;
+}
+
+.body_fix {
+  overflow: hidden;
+}
+
+.desktop {
+  display: block;
+}
+
+.smart {
+  display: none;
+}
+
+@media only screen and (max-width: 860px) {
+  .desktop {
+    display: none;
+  }
+  .smart {
+    display: block;
+  }
+}
+.flex {
+  display: flex;
+  display: -webkit-flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+}
+
+.flex-start {
+  justify-content: flex-start;
+}
+
+.flex-center {
+  justify-content: center;
+}
+
+.align-start {
+  align-items: flex-start;
+}
+
+.align-center {
+  align-items: center;
+}
+
+.align-end {
+  align-items: flex-end;
+}
+
+.nowrap {
+  flex-wrap: nowrap;
+}
+
+.ratio {
+  position: relative;
+  display: block;
+  padding-top: 56.25%;
+  overflow: hidden;
+  backface-visibility: hidden;
+}
+.ratio img,
+.ratio video,
+.ratio iframe {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  margin: auto;
+  width: auto;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  border: none;
+  backface-visibility: hidden;
+}
+
+.sticky {
+  position: sticky;
+  height: fit-content;
+}
+
+.vertical_text {
+  writing-mode: vertical-rl;
+  -webkit-writing-mode: vertical-rl;
+  font-feature-settings: initial;
+  -webkit-font-feature-settings: initial;
+  line-height: 0.9;
+  white-space: nowrap;
+}
+
+.arrow {
+  position: relative;
+  display: block;
+  padding-right: 4.8rem;
+  line-height: 2rem;
+  transition: all 0.2s ease-in-out;
+}
+.arrow i {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  display: block;
+  margin: auto;
+  width: 3.5rem;
+  height: 2rem;
+  overflow: hidden;
+  transition: all 0.2s ease-in-out;
+  z-index: 1;
+}
+.arrow i:before, .arrow i:after {
+  content: "";
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  display: block;
+  margin: auto;
+  transform: translate3d(0, 0, 0);
+  transition: all 0.2s ease-in-out;
+}
+.arrow i:before {
+  width: 100%;
+  height: 100%;
+  transform-origin: right;
+  background-color: #737B84;
+  border-radius: 2rem;
+}
+.arrow i:after {
+  top: 0rem;
+  left: 0;
+  width: 1.2rem;
+  transform: translate3d(0, 0, 0);
+  background-image: url("../images/icon/arrow_w.svg");
+  background-position: center;
+  background-size: contain;
+  background-repeat: no-repeat;
+}
+.arrow.simple i:before {
+  content: none;
+}
+.arrow.w i:before {
+  background-color: #ffffff;
+}
+.arrow.w i:after {
+  background-image: url("../images/icon/arrow.svg");
+}
+.arrow.simple.w i:after {
+  background-image: url("../images/icon/arrow.svg");
+}
+@media only screen and (min-width: 860px) {
+  .arrow:hover i:before {
+    width: 2rem;
+    background-color: #737B84;
+    border-radius: 50%;
+  }
+  .arrow:hover i:after {
+    transform: translate3d(0.2rem, 0%, 0);
+    background-image: url("../images/icon/arrow_w.svg");
+  }
+  .arrow:hover.simple i:after {
+    background-image: url("../images/icon/arrow.svg");
+  }
+}
+
+@media only screen and (min-width: 860px) {
+  a:hover .arrow i:before, button:hover .arrow i:before, label:hover .arrow i:before {
+    width: 2rem;
+    background-color: #737B84;
+    border-radius: 50%;
+  }
+  a:hover .arrow i:after, button:hover .arrow i:after, label:hover .arrow i:after {
+    transform: translate3d(0.2rem, 0%, 0);
+    background-image: url("../images/icon/arrow_w.svg");
+  }
+  a:hover .arrow.outside i:before, button:hover .arrow.outside i:before, label:hover .arrow.outside i:before {
+    transform: translate3d(0, 0, 0) rotate(-45deg);
+    transform: translate3d(0, 0, 0);
+  }
+  a:hover .arrow.outside i:after, button:hover .arrow.outside i:after, label:hover .arrow.outside i:after {
+    transform: translate3d(100%, -100%, 0) rotate(-45deg);
+    transform: translate3d(100%, -100%, 0);
+  }
+}
+
+.underline {
+  position: relative;
+  display: inline-block;
+}
+.underline:before, .underline:after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  display: block;
+  margin: auto;
+  width: 100%;
+  height: 1px;
+  background-color: #D2D2D2;
+}
+.underline:after {
+  background-color: #4F545A;
+  transform: scaleX(0);
+  transform-origin: right;
+  transition: all 0.2s 0.1s ease-in-out, transform-origin 0s linear;
+  z-index: 1;
+}
+@media only screen and (min-width: 860px) {
+  .underline:hover:after {
+    transform: scaleX(1);
+    transform-origin: left;
+    transition: all 0.2s 0.1s ease-in-out, transform-origin 0s linear;
+  }
+}
+
+@media only screen and (min-width: 860px) {
+  a:hover .underline:after, button:hover .underline:after {
+    transform: scaleX(1);
+    transform-origin: left;
+    transition: all 0.2s 0.1s ease-in-out, transform-origin 0s linear;
+  }
+}
+.endless {
+  flex-wrap: nowrap;
+  overflow: hidden;
+}
+.endless .endless_item {
+  position: relative;
+  flex-wrap: nowrap;
+  width: fit-content;
+  white-space: nowrap;
+}
+.endless .endless_item:nth-of-type(odd) {
+  animation: endless 70s -35s linear infinite forwards;
+}
+.endless .endless_item:nth-of-type(even) {
+  animation: endless_2 70s linear infinite forwards;
+}
+.endless .re:nth-of-type(odd), .endless .re:nth-of-type(even) {
+  animation-direction: reverse;
+}
+
+@keyframes endless {
+  0% {
+    transform: translateX(100%);
+  }
+  100% {
+    transform: translateX(-100%);
+  }
+}
+@keyframes endless_2 {
+  0% {
+    transform: translateX(0%);
+  }
+  100% {
+    transform: translateX(-200%);
+  }
+}
+html, body {
+  scrollbar-width: none;
+}
+html::-webkit-scrollbar, body::-webkit-scrollbar {
+  display: none;
+}
+
+body {
+  background-color: #ffffff;
+}
+
+a {
+  color: #3BB2CC;
+  color: #3B82AA;
+}
+
+.arrow {
+  color: #4F545A;
+}

@@ -1,8 +1,10 @@
 import os
+from typing import Any
 
 import httpx
 
 _BE_URL = os.environ.get("BE_SERVER_URL", "http://be-server:8001")
+_SECRET = os.environ.get("INTERNAL_SECRET", "")
 _TIMEOUT = 15.0
 
 
@@ -31,3 +33,44 @@ async def create_note(
         )
         res.raise_for_status()
         return res.json()
+
+
+async def log_request(
+    *,
+    chat_request_id: str | None,
+    session_id: str | None,
+    service: str,
+    operation: str,
+    method: str | None = None,
+    url: str | None = None,
+    request_json: Any = None,
+    response_json: Any = None,
+    status_code: int | None = None,
+    duration_ms: int | None = None,
+    error: str | None = None,
+) -> None:
+    if not _SECRET:
+        return
+    payload = {
+        "chat_request_id": chat_request_id,
+        "session_id": session_id,
+        "direction": "outbound",
+        "service": service,
+        "operation": operation,
+        "method": method,
+        "url": url,
+        "request_json": request_json,
+        "response_json": response_json,
+        "status_code": status_code,
+        "duration_ms": duration_ms,
+        "error": error,
+    }
+    try:
+        async with httpx.AsyncClient(timeout=_TIMEOUT) as client:
+            await client.post(
+                f"{_BE_URL}/internal/request-logs",
+                headers={"X-Internal-Secret": _SECRET},
+                json=payload,
+            )
+    except Exception:
+        return

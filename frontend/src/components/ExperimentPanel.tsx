@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import type { FormEvent } from 'react'
 import { apiGet, apiPost } from '../lib/api'
 
 interface ExperimentConfig {
@@ -52,7 +53,7 @@ export default function ExperimentPanel({ notebookId }: Props) {
     setActive(current => current ?? data[0] ?? null)
   }
 
-  async function run(e: React.FormEvent) {
+  async function run(e: FormEvent) {
     e.preventDefault()
     const queries = queryText.split('\n').map(q => q.trim()).filter(Boolean)
     if (queries.length === 0 || selectedModes.length === 0) return
@@ -88,7 +89,7 @@ export default function ExperimentPanel({ notebookId }: Props) {
             value={name}
             onChange={e => setName(e.target.value)}
             placeholder="Experiment name"
-            className="border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+            className="ui-input"
           />
           <input
             type="number"
@@ -96,7 +97,7 @@ export default function ExperimentPanel({ notebookId }: Props) {
             max={20}
             value={topK}
             onChange={e => setTopK(Number(e.target.value))}
-            className="border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+            className="ui-input"
             aria-label="Top K"
             title="Top K"
           />
@@ -107,7 +108,7 @@ export default function ExperimentPanel({ notebookId }: Props) {
             step={0.1}
             value={alpha}
             onChange={e => setAlpha(Number(e.target.value))}
-            className="border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+            className="ui-input"
             aria-label="Hybrid alpha"
             title="Hybrid alpha"
           />
@@ -118,7 +119,7 @@ export default function ExperimentPanel({ notebookId }: Props) {
           onChange={e => setQueryText(e.target.value)}
           placeholder="One query per line"
           rows={4}
-          className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+          className="ui-input"
         />
 
         <div className="flex flex-wrap items-center gap-2">
@@ -127,8 +128,8 @@ export default function ExperimentPanel({ notebookId }: Props) {
               key={mode}
               type="button"
               onClick={() => toggleMode(mode)}
-              className={`px-3 py-1.5 rounded-lg border text-sm ${
-                selectedModes.includes(mode) ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-gray-700'
+              className={`ui-button h-8 text-xs ${
+                selectedModes.includes(mode) ? 'ui-button-primary' : 'ui-button-secondary'
               }`}
             >
               {mode}
@@ -137,7 +138,7 @@ export default function ExperimentPanel({ notebookId }: Props) {
           <button
             type="submit"
             disabled={loading || !queryText.trim() || selectedModes.length === 0}
-            className="ml-auto px-3 py-1.5 bg-green-600 text-white rounded-lg text-sm hover:bg-green-700 disabled:opacity-40"
+            className="ui-button ui-button-primary ml-auto"
           >
             {loading ? 'Running...' : 'Run'}
           </button>
@@ -152,8 +153,8 @@ export default function ExperimentPanel({ notebookId }: Props) {
             <button
               key={exp.id}
               onClick={() => setActive(exp)}
-              className={`px-2 py-1 rounded border text-xs ${
-                active?.id === exp.id ? 'bg-gray-900 text-white' : 'bg-white text-gray-600'
+              className={`rounded-md border px-2 py-1 text-xs transition ${
+                active?.id === exp.id ? 'border-stone-900 bg-stone-900 text-white' : 'border-stone-200 bg-white text-stone-600 hover:bg-stone-50'
               }`}
             >
               {exp.name}
@@ -163,15 +164,15 @@ export default function ExperimentPanel({ notebookId }: Props) {
       )}
 
       {active && (
-        <div className="border rounded-lg overflow-hidden">
-          <div className="bg-gray-50 px-3 py-2 border-b">
+        <div className="overflow-hidden rounded-lg border border-stone-200">
+          <div className="border-b border-stone-200 bg-stone-50 px-3 py-2">
             <p className="text-sm font-semibold">{active.name}</p>
-            <p className="text-xs text-gray-500">
+            <p className="text-xs text-stone-500">
               {active.config.modes.join(', ')} · top {active.config.top_k} · alpha {active.config.alpha}
             </p>
           </div>
           <table className="w-full text-sm">
-            <thead className="bg-white text-xs text-gray-500">
+            <thead className="bg-white text-xs text-stone-500">
               <tr>
                 <th className="text-left px-3 py-2">Query</th>
                 <th className="text-left px-3 py-2">Mode</th>
@@ -181,7 +182,7 @@ export default function ExperimentPanel({ notebookId }: Props) {
             </thead>
             <tbody>
               {active.results.map((r, i) => (
-                <tr key={i} className="border-t">
+                <tr key={i} className="border-t border-stone-100">
                   <td className="px-3 py-2 max-w-[18rem] truncate">{r.query}</td>
                   <td className="px-3 py-2 font-mono text-xs">{r.mode}</td>
                   <td className="px-3 py-2 text-right">{r.latency_ms} ms</td>

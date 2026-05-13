@@ -2,28 +2,35 @@ import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../hooks/useAuth'
 
 export default function DashboardPage() {
-  const { username, logout } = useAuth()
+  const { username } = useAuth()
   const navigate = useNavigate()
   return (
-    <div className="min-h-screen bg-gray-50 flex flex-col items-center justify-center gap-4">
-      <h1 className="text-3xl font-bold">RAG System</h1>
-      <p className="text-gray-600">
-        Logged in as <span className="font-semibold">{username}</span>
-      </p>
-      <div className="flex gap-3">
+    <div className="mx-auto max-w-4xl space-y-6">
+      <section className="border-b border-stone-200 pb-6">
+        <p className="eyebrow">Home</p>
+        <h1 className="page-title">Knowledge Desk</h1>
+        <p className="mt-3 max-w-2xl text-sm leading-6 text-stone-500">
+          Signed in as <span className="font-medium text-stone-800">{username}</span>.
+        </p>
+      </section>
+
+      <section className="workspace-panel">
+        <div className="workspace-panel-header">
+          <div>
+            <p className="eyebrow">Start</p>
+            <h2 className="section-title">Open your notebooks</h2>
+          </div>
+        </div>
+        <p className="max-w-xl text-sm leading-6 text-stone-500">
+          Manage sources, notes, retrieval experiments, and chat from a cleaner workspace.
+        </p>
         <button
           onClick={() => navigate('/notebooks')}
-          className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition"
+          className="ui-button ui-button-primary mt-5"
         >
-          My Notebooks
+          Open notebooks
         </button>
-        <button
-          onClick={logout}
-          className="px-4 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600 transition"
-        >
-          Sign Out
-        </button>
-      </div>
+      </section>
     </div>
   )
 }

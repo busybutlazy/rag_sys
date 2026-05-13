@@ -83,8 +83,13 @@ namespace BeServer.Migrations
             modelBuilder.Entity("BeServer.Data.Entities.ChatSession", b =>
             {
                 b.Property<string>("Id").HasMaxLength(36).HasColumnType("varchar(36)");
+                b.Property<string>("ActiveTaskId").HasMaxLength(36).HasColumnType("varchar(36)");
+                b.Property<bool>("Archived").HasColumnType("tinyint(1)").HasDefaultValue(false);
                 b.Property<DateTime>("CreatedAt").HasColumnType("datetime");
+                b.Property<DateTime?>("LastMessageAt").HasColumnType("datetime");
+                b.Property<string>("Mode").IsRequired().HasMaxLength(32).HasColumnType("varchar(32)").HasDefaultValue("chat");
                 b.Property<string>("NotebookId").IsRequired().HasMaxLength(36).HasColumnType("varchar(36)");
+                b.Property<string>("SessionStateJson").HasColumnType("json");
                 b.Property<string>("Title").HasMaxLength(512).HasColumnType("varchar(512)");
                 b.Property<DateTime>("UpdatedAt").HasColumnType("datetime");
                 b.Property<string>("UserId").IsRequired().HasMaxLength(36).HasColumnType("varchar(36)");
@@ -93,6 +98,93 @@ namespace BeServer.Migrations
                 b.HasIndex("UserId");
                 b.HasIndex("UserId", "NotebookId");
                 b.ToTable("ChatSessions");
+            });
+
+            modelBuilder.Entity("BeServer.Data.Entities.ChatMessage", b =>
+            {
+                b.Property<string>("Id").HasMaxLength(36).HasColumnType("varchar(36)");
+                b.Property<string>("Content").IsRequired().HasColumnType("longtext");
+                b.Property<string>("ContentPreview").IsRequired().HasMaxLength(150).HasColumnType("varchar(150)");
+                b.Property<DateTime>("CreatedAt").HasColumnType("datetime");
+                b.Property<string>("MetadataJson").HasColumnType("json");
+                b.Property<string>("NotebookId").IsRequired().HasMaxLength(36).HasColumnType("varchar(36)");
+                b.Property<string>("RequestId").HasMaxLength(36).HasColumnType("varchar(36)");
+                b.Property<string>("Role").IsRequired().HasMaxLength(16).HasColumnType("varchar(16)");
+                b.Property<int>("Sequence").HasColumnType("int");
+                b.Property<string>("SessionId").IsRequired().HasMaxLength(36).HasColumnType("varchar(36)");
+                b.Property<string>("SourcesJson").HasColumnType("json");
+                b.Property<string>("TracesJson").HasColumnType("json");
+                b.Property<string>("UserId").IsRequired().HasMaxLength(36).HasColumnType("varchar(36)");
+                b.HasKey("Id");
+                b.HasIndex("NotebookId");
+                b.HasIndex("SessionId");
+                b.HasIndex("SessionId", "Sequence").IsUnique();
+                b.HasIndex("UserId");
+                b.HasIndex("UserId", "NotebookId");
+                b.ToTable("ChatMessages");
+            });
+
+            modelBuilder.Entity("BeServer.Data.Entities.ChatRequest", b =>
+            {
+                b.Property<string>("Id").HasMaxLength(36).HasColumnType("varchar(36)");
+                b.Property<string>("AssistantMessageId").HasMaxLength(36).HasColumnType("varchar(36)");
+                b.Property<DateTime?>("CompletedAt").HasColumnType("datetime");
+                b.Property<string>("ContextSnapshotJson").HasColumnType("json");
+                b.Property<int?>("DurationMs").HasColumnType("int");
+                b.Property<string>("Error").HasColumnType("text");
+                b.Property<string>("Mode").IsRequired().HasMaxLength(32).HasColumnType("varchar(32)");
+                b.Property<string>("Model").IsRequired().HasMaxLength(128).HasColumnType("varchar(128)");
+                b.Property<string>("SessionId").IsRequired().HasMaxLength(36).HasColumnType("varchar(36)");
+                b.Property<DateTime>("StartedAt").HasColumnType("datetime");
+                b.Property<string>("Status").IsRequired().HasMaxLength(32).HasColumnType("varchar(32)");
+                b.Property<string>("UserMessageId").HasMaxLength(36).HasColumnType("varchar(36)");
+                b.HasKey("Id");
+                b.HasIndex("SessionId");
+                b.HasIndex("UserMessageId");
+                b.ToTable("ChatRequests");
+            });
+
+            modelBuilder.Entity("BeServer.Data.Entities.RequestLog", b =>
+            {
+                b.Property<string>("Id").HasMaxLength(36).HasColumnType("varchar(36)");
+                b.Property<string>("ChatRequestId").HasMaxLength(36).HasColumnType("varchar(36)");
+                b.Property<DateTime>("CreatedAt").HasColumnType("datetime");
+                b.Property<string>("Direction").IsRequired().HasMaxLength(32).HasColumnType("varchar(32)");
+                b.Property<int?>("DurationMs").HasColumnType("int");
+                b.Property<string>("Error").HasColumnType("text");
+                b.Property<string>("Method").HasMaxLength(16).HasColumnType("varchar(16)");
+                b.Property<string>("Operation").IsRequired().HasMaxLength(128).HasColumnType("varchar(128)");
+                b.Property<string>("RequestJson").HasColumnType("json");
+                b.Property<string>("ResponseJson").HasColumnType("json");
+                b.Property<string>("Service").IsRequired().HasMaxLength(64).HasColumnType("varchar(64)");
+                b.Property<string>("SessionId").HasMaxLength(36).HasColumnType("varchar(36)");
+                b.Property<int?>("StatusCode").HasColumnType("int");
+                b.Property<string>("Url").HasMaxLength(2048).HasColumnType("varchar(2048)");
+                b.HasKey("Id");
+                b.HasIndex("ChatRequestId");
+                b.HasIndex("Service", "Operation");
+                b.HasIndex("SessionId");
+                b.ToTable("RequestLogs");
+            });
+
+            modelBuilder.Entity("BeServer.Data.Entities.SessionTask", b =>
+            {
+                b.Property<string>("Id").HasMaxLength(36).HasColumnType("varchar(36)");
+                b.Property<DateTime?>("CompletedAt").HasColumnType("datetime");
+                b.Property<DateTime>("CreatedAt").HasColumnType("datetime");
+                b.Property<string>("CreatedFromRequestId").HasMaxLength(36).HasColumnType("varchar(36)");
+                b.Property<string>("SessionId").IsRequired().HasMaxLength(36).HasColumnType("varchar(36)");
+                b.Property<int>("SortOrder").HasColumnType("int");
+                b.Property<string>("StateJson").HasColumnType("json");
+                b.Property<string>("Status").IsRequired().HasMaxLength(32).HasColumnType("varchar(32)");
+                b.Property<string>("Summary").HasColumnType("text");
+                b.Property<string>("Title").IsRequired().HasMaxLength(512).HasColumnType("varchar(512)");
+                b.Property<DateTime>("UpdatedAt").HasColumnType("datetime");
+                b.Property<string>("UpdatedFromRequestId").HasMaxLength(36).HasColumnType("varchar(36)");
+                b.HasKey("Id");
+                b.HasIndex("SessionId");
+                b.HasIndex("SessionId", "Status");
+                b.ToTable("SessionTasks");
             });
 
             modelBuilder.Entity("BeServer.Data.Entities.Notebook", b =>
@@ -151,6 +243,74 @@ namespace BeServer.Migrations
                     .IsRequired();
                 b.Navigation("Notebook");
                 b.Navigation("User");
+            });
+
+            modelBuilder.Entity("BeServer.Data.Entities.ChatMessage", b =>
+            {
+                b.HasOne("BeServer.Data.Entities.Notebook", "Notebook")
+                    .WithMany()
+                    .HasForeignKey("NotebookId")
+                    .OnDelete(DeleteBehavior.Cascade)
+                    .IsRequired();
+                b.HasOne("BeServer.Data.Entities.ChatSession", "Session")
+                    .WithMany("Messages")
+                    .HasForeignKey("SessionId")
+                    .OnDelete(DeleteBehavior.Cascade)
+                    .IsRequired();
+                b.HasOne("BeServer.Data.Entities.User", "User")
+                    .WithMany()
+                    .HasForeignKey("UserId")
+                    .OnDelete(DeleteBehavior.Cascade)
+                    .IsRequired();
+                b.Navigation("Notebook");
+                b.Navigation("Session");
+                b.Navigation("User");
+            });
+
+            modelBuilder.Entity("BeServer.Data.Entities.ChatRequest", b =>
+            {
+                b.HasOne("BeServer.Data.Entities.ChatSession", "Session")
+                    .WithMany("Requests")
+                    .HasForeignKey("SessionId")
+                    .OnDelete(DeleteBehavior.Cascade)
+                    .IsRequired();
+                b.Navigation("Session");
+            });
+
+            modelBuilder.Entity("BeServer.Data.Entities.RequestLog", b =>
+            {
+                b.HasOne("BeServer.Data.Entities.ChatRequest", "ChatRequest")
+                    .WithMany("Logs")
+                    .HasForeignKey("ChatRequestId")
+                    .OnDelete(DeleteBehavior.SetNull);
+                b.HasOne("BeServer.Data.Entities.ChatSession", "Session")
+                    .WithMany()
+                    .HasForeignKey("SessionId")
+                    .OnDelete(DeleteBehavior.SetNull);
+                b.Navigation("ChatRequest");
+                b.Navigation("Session");
+            });
+
+            modelBuilder.Entity("BeServer.Data.Entities.SessionTask", b =>
+            {
+                b.HasOne("BeServer.Data.Entities.ChatSession", "Session")
+                    .WithMany("Tasks")
+                    .HasForeignKey("SessionId")
+                    .OnDelete(DeleteBehavior.Cascade)
+                    .IsRequired();
+                b.Navigation("Session");
+            });
+
+            modelBuilder.Entity("BeServer.Data.Entities.ChatRequest", b =>
+            {
+                b.Navigation("Logs");
+            });
+
+            modelBuilder.Entity("BeServer.Data.Entities.ChatSession", b =>
+            {
+                b.Navigation("Messages");
+                b.Navigation("Requests");
+                b.Navigation("Tasks");
             });
 
             modelBuilder.Entity("BeServer.Data.Entities.Notebook", b =>
