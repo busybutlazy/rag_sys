@@ -3,7 +3,6 @@ using System;
 using BeServer.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
-using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 
 #nullable disable
 
@@ -16,37 +15,149 @@ namespace BeServer.Migrations
         {
 #pragma warning disable 612, 618
             modelBuilder
-                .HasAnnotation("ProductVersion", "8.0.0")
+                .HasAnnotation("ProductVersion", "8.0.16")
                 .HasAnnotation("Relational:MaxIdentifierLength", 64);
 
             modelBuilder.Entity("BeServer.Data.Entities.User", b =>
             {
-                b.Property<string>("Id")
-                    .HasMaxLength(36)
-                    .HasColumnType("varchar(36)");
-
-                b.Property<DateTime>("CreatedAt")
-                    .HasColumnType("datetime");
-
-                b.Property<string>("PasswordHash")
-                    .IsRequired()
-                    .HasMaxLength(255)
-                    .HasColumnType("varchar(255)");
-
-                b.Property<DateTime>("UpdatedAt")
-                    .HasColumnType("datetime");
-
-                b.Property<string>("Username")
-                    .IsRequired()
-                    .HasMaxLength(64)
-                    .HasColumnType("varchar(64)");
-
+                b.Property<string>("Id").HasMaxLength(36).HasColumnType("varchar(36)");
+                b.Property<DateTime>("CreatedAt").HasColumnType("datetime");
+                b.Property<string>("PasswordHash").IsRequired().HasMaxLength(255).HasColumnType("varchar(255)");
+                b.Property<DateTime>("UpdatedAt").HasColumnType("datetime");
+                b.Property<string>("Username").IsRequired().HasMaxLength(64).HasColumnType("varchar(64)");
                 b.HasKey("Id");
-
-                b.HasIndex("Username")
-                    .IsUnique();
-
+                b.HasIndex("Username").IsUnique();
                 b.ToTable("Users");
+            });
+
+            modelBuilder.Entity("BeServer.Data.Entities.Notebook", b =>
+            {
+                b.Property<string>("Id").HasMaxLength(36).HasColumnType("varchar(36)");
+                b.Property<bool>("Archived").HasColumnType("tinyint(1)").HasDefaultValue(false);
+                b.Property<DateTime>("CreatedAt").HasColumnType("datetime");
+                b.Property<string>("Description").HasMaxLength(1000).HasColumnType("varchar(1000)");
+                b.Property<string>("Name").IsRequired().HasMaxLength(255).HasColumnType("varchar(255)");
+                b.Property<DateTime>("UpdatedAt").HasColumnType("datetime");
+                b.Property<string>("UserId").IsRequired().HasMaxLength(36).HasColumnType("varchar(36)");
+                b.HasKey("Id");
+                b.HasIndex("UserId");
+                b.ToTable("Notebooks");
+            });
+
+            modelBuilder.Entity("BeServer.Data.Entities.Source", b =>
+            {
+                b.Property<string>("Id").HasMaxLength(36).HasColumnType("varchar(36)");
+                b.Property<DateTime>("CreatedAt").HasColumnType("datetime");
+                b.Property<string>("FilePath").HasMaxLength(1024).HasColumnType("varchar(1024)");
+                b.Property<long?>("FileSizeBytes").HasColumnType("bigint");
+                b.Property<string>("MimeType").HasMaxLength(128).HasColumnType("varchar(128)");
+                b.Property<string>("NotebookId").IsRequired().HasMaxLength(36).HasColumnType("varchar(36)");
+                b.Property<string>("Status").IsRequired().HasMaxLength(32).HasColumnType("varchar(32)").HasDefaultValue("uploaded");
+                b.Property<string>("Title").IsRequired().HasMaxLength(512).HasColumnType("varchar(512)");
+                b.Property<DateTime>("UpdatedAt").HasColumnType("datetime");
+                b.Property<string>("UserId").IsRequired().HasMaxLength(36).HasColumnType("varchar(36)");
+                b.HasKey("Id");
+                b.HasIndex("NotebookId");
+                b.HasIndex("UserId");
+                b.HasIndex("UserId", "NotebookId");
+                b.ToTable("Sources");
+            });
+
+            modelBuilder.Entity("BeServer.Data.Entities.Note", b =>
+            {
+                b.Property<string>("Id").HasMaxLength(36).HasColumnType("varchar(36)");
+                b.Property<string>("Content").IsRequired().HasColumnType("text");
+                b.Property<DateTime>("CreatedAt").HasColumnType("datetime");
+                b.Property<string>("NoteType").IsRequired().HasMaxLength(16).HasColumnType("varchar(16)").HasDefaultValue("human");
+                b.Property<string>("NotebookId").IsRequired().HasMaxLength(36).HasColumnType("varchar(36)");
+                b.Property<string>("Title").HasMaxLength(512).HasColumnType("varchar(512)");
+                b.Property<DateTime>("UpdatedAt").HasColumnType("datetime");
+                b.Property<string>("UserId").IsRequired().HasMaxLength(36).HasColumnType("varchar(36)");
+                b.HasKey("Id");
+                b.HasIndex("NotebookId");
+                b.HasIndex("UserId");
+                b.HasIndex("UserId", "NotebookId");
+                b.ToTable("Notes");
+            });
+
+            modelBuilder.Entity("BeServer.Data.Entities.ChatSession", b =>
+            {
+                b.Property<string>("Id").HasMaxLength(36).HasColumnType("varchar(36)");
+                b.Property<DateTime>("CreatedAt").HasColumnType("datetime");
+                b.Property<string>("NotebookId").IsRequired().HasMaxLength(36).HasColumnType("varchar(36)");
+                b.Property<string>("Title").HasMaxLength(512).HasColumnType("varchar(512)");
+                b.Property<DateTime>("UpdatedAt").HasColumnType("datetime");
+                b.Property<string>("UserId").IsRequired().HasMaxLength(36).HasColumnType("varchar(36)");
+                b.HasKey("Id");
+                b.HasIndex("NotebookId");
+                b.HasIndex("UserId");
+                b.HasIndex("UserId", "NotebookId");
+                b.ToTable("ChatSessions");
+            });
+
+            modelBuilder.Entity("BeServer.Data.Entities.Notebook", b =>
+            {
+                b.HasOne("BeServer.Data.Entities.User", "User")
+                    .WithMany()
+                    .HasForeignKey("UserId")
+                    .OnDelete(DeleteBehavior.Cascade)
+                    .IsRequired();
+                b.Navigation("User");
+            });
+
+            modelBuilder.Entity("BeServer.Data.Entities.Source", b =>
+            {
+                b.HasOne("BeServer.Data.Entities.Notebook", "Notebook")
+                    .WithMany("Sources")
+                    .HasForeignKey("NotebookId")
+                    .OnDelete(DeleteBehavior.Cascade)
+                    .IsRequired();
+                b.HasOne("BeServer.Data.Entities.User", "User")
+                    .WithMany()
+                    .HasForeignKey("UserId")
+                    .OnDelete(DeleteBehavior.Cascade)
+                    .IsRequired();
+                b.Navigation("Notebook");
+                b.Navigation("User");
+            });
+
+            modelBuilder.Entity("BeServer.Data.Entities.Note", b =>
+            {
+                b.HasOne("BeServer.Data.Entities.Notebook", "Notebook")
+                    .WithMany("Notes")
+                    .HasForeignKey("NotebookId")
+                    .OnDelete(DeleteBehavior.Cascade)
+                    .IsRequired();
+                b.HasOne("BeServer.Data.Entities.User", "User")
+                    .WithMany()
+                    .HasForeignKey("UserId")
+                    .OnDelete(DeleteBehavior.Cascade)
+                    .IsRequired();
+                b.Navigation("Notebook");
+                b.Navigation("User");
+            });
+
+            modelBuilder.Entity("BeServer.Data.Entities.ChatSession", b =>
+            {
+                b.HasOne("BeServer.Data.Entities.Notebook", "Notebook")
+                    .WithMany("ChatSessions")
+                    .HasForeignKey("NotebookId")
+                    .OnDelete(DeleteBehavior.Cascade)
+                    .IsRequired();
+                b.HasOne("BeServer.Data.Entities.User", "User")
+                    .WithMany()
+                    .HasForeignKey("UserId")
+                    .OnDelete(DeleteBehavior.Cascade)
+                    .IsRequired();
+                b.Navigation("Notebook");
+                b.Navigation("User");
+            });
+
+            modelBuilder.Entity("BeServer.Data.Entities.Notebook", b =>
+            {
+                b.Navigation("ChatSessions");
+                b.Navigation("Notes");
+                b.Navigation("Sources");
             });
 #pragma warning restore 612, 618
         }

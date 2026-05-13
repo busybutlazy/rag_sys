@@ -52,4 +52,50 @@ public class RagClient(HttpClient http, IConfiguration config)
         response.EnsureSuccessStatusCode();
         return await response.Content.ReadAsStringAsync();
     }
+
+    public async Task<string> RunExperimentAsync(string notebookId, ExperimentRunRequest req)
+    {
+        var config = req.Config ?? new ExperimentConfig(["vector", "bm25", "hybrid"]);
+        var payload = new
+        {
+            notebook_id = notebookId,
+            name = req.Name,
+            queries = req.Queries,
+            config = new
+            {
+                modes = config.Modes,
+                top_k = config.TopK,
+                alpha = config.Alpha,
+            },
+        };
+        var msg = new HttpRequestMessage(HttpMethod.Post, "/experiments/run")
+        {
+            Content = JsonContent.Create(payload)
+        };
+        AddSecret(msg);
+        var response = await http.SendAsync(msg);
+        response.EnsureSuccessStatusCode();
+        return await response.Content.ReadAsStringAsync();
+    }
+
+    public async Task<string> ListExperimentsAsync(string notebookId, int limit)
+    {
+        var msg = new HttpRequestMessage(HttpMethod.Get, $"/experiments?notebook_id={notebookId}&limit={limit}");
+        AddSecret(msg);
+        var response = await http.SendAsync(msg);
+        response.EnsureSuccessStatusCode();
+        return await response.Content.ReadAsStringAsync();
+    }
+
+    public async Task<string> GetExperimentAsync(string notebookId, string experimentId)
+    {
+        var msg = new HttpRequestMessage(HttpMethod.Get, $"/experiments/{experimentId}?notebook_id={notebookId}");
+        AddSecret(msg);
+        var response = await http.SendAsync(msg);
+        response.EnsureSuccessStatusCode();
+        return await response.Content.ReadAsStringAsync();
+    }
 }
+
+public record ExperimentConfig(string[] Modes, int TopK = 5, double Alpha = 0.5);
+public record ExperimentRunRequest(string? Name, string[] Queries, ExperimentConfig? Config);

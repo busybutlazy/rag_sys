@@ -30,7 +30,7 @@ users.reload();
 db._useDatabase(ARANGO_DB);
 
 // Phase 0: skeleton collections only
-const collections = ["documents", "chunks", "notebooks"];
+const collections = ["documents", "chunks", "notebooks", "experiments"];
 for (const name of collections) {
   if (!db._collection(name)) {
     db._create(name);
