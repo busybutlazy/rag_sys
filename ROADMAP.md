@@ -210,14 +210,20 @@
 ## Phase 7 — Polish & Experimentation Tooling
 **Goal:** Stable, usable product; experiment framework to compare RAG configurations.
 
-- [ ] Experiment runner: parametric test runs (embedding model, chunk size, search mode, top_k)
-- [ ] Results stored in ArangoDB `experiments` collection
-- [ ] Frontend: experiment dashboard — run config, latency, relevance scores
-- [ ] Multi-user readiness: enforce `user_id` FK across all SQL tables; ArangoDB one-db-per-user migration helper
-- [ ] Rate limiting, input validation hardening
-- [ ] Structured logging (JSON) across all services
+- [x] Experiment runner: parametric test runs (embedding model, chunk size, search mode, top_k)
+- [x] Results stored in ArangoDB `experiments` collection
+- [x] Frontend: experiment dashboard — run config, latency, relevance scores
+- [x] Multi-user readiness: enforce `user_id` FK across all SQL tables; ArangoDB one-db-per-user migration helper
+- [x] Rate limiting, input validation hardening
+- [x] Structured logging (JSON) across all services
 
 **Deliverable:** Can run A/B experiments on RAG config and compare results in the UI.
+
+**Learnings:**
+- Experiment result records should store source references and metrics, not full chunk text, to keep ArangoDB records compact.
+- BE experiment endpoints must remain the ownership boundary; RAG endpoints stay internal-secret guarded.
+- JSON logging should be encoded with a real formatter, not JSON-shaped format strings.
+- EF snapshots need to stay aligned with manual migrations or future migration generation becomes unsafe.
 
 ---
 
