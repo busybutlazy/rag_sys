@@ -30,3 +30,4 @@ class SourceContentResponse(BaseModel):
     notebook_id: str
     chunks: list[ChunkResult]
     text: str
+    truncated: bool

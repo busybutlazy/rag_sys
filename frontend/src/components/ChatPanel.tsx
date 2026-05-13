@@ -155,6 +155,12 @@ export default function ChatPanel({ notebookId, getToken }: Props) {
     abortRef.current?.abort()
   }
 
+  function formatArgs(args?: Record<string, unknown>) {
+    if (!args) return ''
+    const text = JSON.stringify(args)
+    return text.length > 160 ? `${text.slice(0, 157)}...` : text
+  }
+
   return (
     <div className="flex flex-col h-[28rem] border rounded-lg overflow-hidden">
       <div className="flex items-center justify-between gap-3 border-b bg-white px-3 py-2">
@@ -223,6 +229,11 @@ export default function ChatPanel({ notebookId, getToken }: Props) {
                           </span>
                         )}
                       </div>
+                      {t.arguments && (
+                        <div className="mt-0.5 truncate font-mono text-gray-400">
+                          {formatArgs(t.arguments)}
+                        </div>
+                      )}
                       {t.summary && <div className="mt-0.5 truncate">{t.summary}</div>}
                     </li>
                   ))}

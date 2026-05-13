@@ -189,17 +189,25 @@ def get_source_content(
         bind_vars={"source_id": source_id, "notebook_id": notebook_id},
     )
     chunks = list(cursor)
+    returned_chunks: list[dict] = []
     text_parts: list[str] = []
     remaining = max_chars
+    truncated = False
     for chunk in chunks:
         if remaining <= 0:
+            truncated = True
             break
-        part = chunk["text"][:remaining]
+        original_text = chunk["text"]
+        part = original_text[:remaining]
+        if len(part) < len(original_text):
+            truncated = True
         text_parts.append(f"[chunk {chunk['chunk_index']}]\n{part}")
+        returned_chunks.append({**chunk, "text": part})
         remaining -= len(part)
     return {
         "source_id": source_id,
         "notebook_id": notebook_id,
-        "chunks": chunks,
+        "chunks": returned_chunks,
         "text": "\n\n---\n\n".join(text_parts),
+        "truncated": truncated,
     }
