@@ -23,3 +23,10 @@ class BenchmarkResponse(BaseModel):
     vector: list[ChunkResult]
     bm25: list[ChunkResult]
     hybrid: list[ChunkResult]
+
+
+class SourceContentResponse(BaseModel):
+    source_id: str
+    notebook_id: str
+    chunks: list[ChunkResult]
+    text: str

@@ -2,7 +2,7 @@ import os
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, HTTPException, Header, Query
 from app.db import get_db
-from app.models import IngestRequest, SearchResponse, BenchmarkResponse
+from app.models import IngestRequest, SearchResponse, BenchmarkResponse, SourceContentResponse
 from app import chunker, embedder, vector_store
 
 _INTERNAL_SECRET = os.environ.get("INTERNAL_SECRET", "")
@@ -18,6 +18,7 @@ def _check_secret(x_internal_secret: str | None) -> None:
 @asynccontextmanager
 async def lifespan(_: FastAPI):
     db = get_db()
+    vector_store.ensure_collections(db)
     vector_store.ensure_vector_index(db)
     vector_store.ensure_search_view(db)
     yield
@@ -151,3 +152,17 @@ async def delete_document(
     docs_col = db.collection("documents")
     if docs_col.has(source_id):
         docs_col.delete(source_id)
+
+
+@app.get("/documents/{source_id}/content", response_model=SourceContentResponse)
+async def get_document_content(
+    source_id: str,
+    notebook_id: str = Query(..., description="Notebook scope for the source"),
+    max_chars: int = Query(default=12000, ge=1000, le=50000),
+    x_internal_secret: str | None = Header(default=None),
+):
+    _check_secret(x_internal_secret)
+    content = vector_store.get_source_content(get_db(), source_id, notebook_id, max_chars)
+    if not content["chunks"]:
+        raise HTTPException(status_code=404, detail="Source content not found")
+    return SourceContentResponse(**content)
