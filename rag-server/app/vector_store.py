@@ -92,7 +92,7 @@ def search_vector(
     aql = """
     FOR doc IN chunks
       FILTER doc.notebook_id == @notebook_id
-      SORT APPROX_NEAR_COSINE(doc.embedding, @query_vec)
+      SORT APPROX_NEAR_COSINE(doc.embedding, @query_vec) DESC
       LIMIT @top_k
       RETURN {
         source_id: doc.source_id,
