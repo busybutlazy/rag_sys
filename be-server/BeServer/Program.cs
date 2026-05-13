@@ -19,7 +19,13 @@ var connStr =
 
 // Pinned version avoids a live DB call during DI registration (SEC-06)
 builder.Services.AddDbContext<AppDbContext>(opt =>
-    opt.UseMySql(connStr, new MySqlServerVersion(new Version(8, 0, 0))));
+    opt.UseMySql(
+        connStr,
+        new MySqlServerVersion(new Version(8, 0, 0)),
+        mysql => mysql.EnableRetryOnFailure(
+            maxRetryCount: 10,
+            maxRetryDelay: TimeSpan.FromSeconds(10),
+            errorNumbersToAdd: null)));
 
 // ── JWT ──────────────────────────────────────────
 var jwtSecret = builder.Configuration["JWT_SECRET"]
@@ -65,8 +71,9 @@ var app = builder.Build();
 using (var scope = app.Services.CreateScope())
 {
     var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
-    db.Database.Migrate();
-    await SeedAdminUser(db, builder.Configuration);
+    var logger = scope.ServiceProvider.GetRequiredService<ILoggerFactory>()
+        .CreateLogger("DatabaseStartup");
+    await MigrateAndSeedWithRetry(db, builder.Configuration, logger);
 }
 
 app.UseCors("frontend");
@@ -77,6 +84,30 @@ app.MapGet("/health", () => Results.Ok(new { status = "ok", service = "be-server
 app.MapControllers();
 
 app.Run();
+
+static async Task MigrateAndSeedWithRetry(AppDbContext db, IConfiguration config, ILogger logger)
+{
+    const int maxAttempts = 12;
+
+    for (var attempt = 1; attempt <= maxAttempts; attempt++)
+    {
+        try
+        {
+            await db.Database.MigrateAsync();
+            await SeedAdminUser(db, config);
+            return;
+        }
+        catch (Exception ex) when (attempt < maxAttempts)
+        {
+            logger.LogWarning(
+                ex,
+                "Database migration failed on attempt {Attempt}/{MaxAttempts}; retrying.",
+                attempt,
+                maxAttempts);
+            await Task.Delay(TimeSpan.FromSeconds(5));
+        }
+    }
+}
 
 // ── Seed helper ──────────────────────────────────
 static async Task SeedAdminUser(AppDbContext db, IConfiguration config)
