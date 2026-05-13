@@ -36,10 +36,16 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-stone-50 px-4">
-      <div className="w-full max-w-sm rounded-xl border border-stone-200 bg-white p-7 shadow-sm">
+    <div className="login-page">
+      <div className="login-visual" aria-hidden="true">
+        <div className="login-arch">
+          <span>Knowledge</span>
+          <span>Desk</span>
+        </div>
+      </div>
+      <div className="login-panel">
         <p className="eyebrow text-center">RAG</p>
-        <h1 className="mb-6 mt-1 text-center text-2xl font-semibold tracking-[-0.01em] text-stone-900">Knowledge Desk</h1>
+        <h1>Knowledge Desk</h1>
         {error && (
           <p className="mb-4 rounded-md border border-red-100 bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>
         )}
