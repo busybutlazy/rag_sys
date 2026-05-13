@@ -51,7 +51,9 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             e.Property(s => s.UpdatedAt).HasColumnType("datetime");
             e.HasOne(s => s.User).WithMany().HasForeignKey(s => s.UserId).OnDelete(DeleteBehavior.Cascade);
             e.HasOne(s => s.Notebook).WithMany(n => n.Sources).HasForeignKey(s => s.NotebookId).OnDelete(DeleteBehavior.Cascade);
+            e.HasIndex(s => s.UserId);
             e.HasIndex(s => s.NotebookId);
+            e.HasIndex(s => new { s.UserId, s.NotebookId });
         });
 
         modelBuilder.Entity<Note>(e =>
@@ -67,7 +69,9 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             e.Property(n => n.UpdatedAt).HasColumnType("datetime");
             e.HasOne(n => n.User).WithMany().HasForeignKey(n => n.UserId).OnDelete(DeleteBehavior.Cascade);
             e.HasOne(n => n.Notebook).WithMany(nb => nb.Notes).HasForeignKey(n => n.NotebookId).OnDelete(DeleteBehavior.Cascade);
+            e.HasIndex(n => n.UserId);
             e.HasIndex(n => n.NotebookId);
+            e.HasIndex(n => new { n.UserId, n.NotebookId });
         });
 
         modelBuilder.Entity<ChatSession>(e =>
@@ -81,7 +85,9 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             e.Property(cs => cs.UpdatedAt).HasColumnType("datetime");
             e.HasOne(cs => cs.User).WithMany().HasForeignKey(cs => cs.UserId).OnDelete(DeleteBehavior.Cascade);
             e.HasOne(cs => cs.Notebook).WithMany(n => n.ChatSessions).HasForeignKey(cs => cs.NotebookId).OnDelete(DeleteBehavior.Cascade);
+            e.HasIndex(cs => cs.UserId);
             e.HasIndex(cs => cs.NotebookId);
+            e.HasIndex(cs => new { cs.UserId, cs.NotebookId });
         });
     }
 }

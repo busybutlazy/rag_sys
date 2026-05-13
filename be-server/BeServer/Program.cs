@@ -4,10 +4,15 @@ using BeServer.Data;
 using BeServer.Data.Entities;
 using BeServer.Services;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
+using System.Threading.RateLimiting;
 
 var builder = WebApplication.CreateBuilder(args);
+
+builder.Logging.ClearProviders();
+builder.Logging.AddJsonConsole();
 
 // ── Database ─────────────────────────────────────
 var connStr =
@@ -52,6 +57,22 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
     });
 
 builder.Services.AddAuthorization();
+builder.Services.AddRateLimiter(options =>
+{
+    options.AddFixedWindowLimiter("auth", limiter =>
+    {
+        limiter.PermitLimit = 10;
+        limiter.Window = TimeSpan.FromMinutes(1);
+        limiter.QueueLimit = 0;
+    });
+    options.AddFixedWindowLimiter("write", limiter =>
+    {
+        limiter.PermitLimit = 60;
+        limiter.Window = TimeSpan.FromMinutes(1);
+        limiter.QueueProcessingOrder = QueueProcessingOrder.OldestFirst;
+        limiter.QueueLimit = 5;
+    });
+});
 builder.Services.AddScoped<JwtService>();
 builder.Services.AddControllers();
 builder.Services.AddHttpClient<RagClient>(client =>
@@ -77,6 +98,7 @@ using (var scope = app.Services.CreateScope())
 }
 
 app.UseCors("frontend");
+app.UseRateLimiter();
 app.UseAuthentication();
 app.UseAuthorization();
 

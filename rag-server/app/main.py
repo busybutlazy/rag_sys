@@ -1,9 +1,29 @@
 import os
+import logging.config
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, HTTPException, Header, Query
 from app.db import get_db
-from app.models import IngestRequest, SearchResponse, BenchmarkResponse, SourceContentResponse
-from app import chunker, embedder, vector_store
+from app.models import (
+    BenchmarkResponse,
+    ExperimentRecord,
+    ExperimentRunRequest,
+    IngestRequest,
+    SearchResponse,
+    SourceContentResponse,
+)
+from app import chunker, embedder, experiments, vector_store
+
+logging.config.dictConfig({
+    "version": 1,
+    "disable_existing_loggers": False,
+    "formatters": {
+        "json": {
+            "format": '{"time":"%(asctime)s","level":"%(levelname)s","logger":"%(name)s","message":"%(message)s"}'
+        }
+    },
+    "handlers": {"default": {"class": "logging.StreamHandler", "formatter": "json"}},
+    "root": {"handlers": ["default"], "level": os.environ.get("LOG_LEVEL", "INFO")},
+})
 
 _INTERNAL_SECRET = os.environ.get("INTERNAL_SECRET", "")
 if not _INTERNAL_SECRET:
@@ -166,3 +186,39 @@ async def get_document_content(
     if not content["chunks"]:
         raise HTTPException(status_code=404, detail="Source content not found")
     return SourceContentResponse(**content)
+
+
+@app.post("/experiments/run", response_model=ExperimentRecord)
+async def run_experiment(
+    req: ExperimentRunRequest,
+    x_internal_secret: str | None = Header(default=None),
+):
+    _check_secret(x_internal_secret)
+    try:
+        record = await experiments.run_experiment(get_db(), req)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    return experiments.validate_record(record)
+
+
+@app.get("/experiments", response_model=list[ExperimentRecord])
+async def list_experiments(
+    notebook_id: str = Query(...),
+    limit: int = Query(default=20, ge=1, le=100),
+    x_internal_secret: str | None = Header(default=None),
+):
+    _check_secret(x_internal_secret)
+    return [experiments.validate_record(r) for r in experiments.list_experiments(get_db(), notebook_id, limit)]
+
+
+@app.get("/experiments/{experiment_id}", response_model=ExperimentRecord)
+async def get_experiment(
+    experiment_id: str,
+    notebook_id: str = Query(...),
+    x_internal_secret: str | None = Header(default=None),
+):
+    _check_secret(x_internal_secret)
+    record = experiments.get_experiment(get_db(), experiment_id, notebook_id)
+    if record is None:
+        raise HTTPException(status_code=404, detail="Experiment not found")
+    return experiments.validate_record(record)

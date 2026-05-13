@@ -5,7 +5,7 @@ from app.embedder import DIMENSIONS
 
 
 def ensure_collections(db) -> None:
-    for name in ["documents", "chunks", "notebooks"]:
+    for name in ["documents", "chunks", "notebooks", "experiments"]:
         if not db.has_collection(name):
             db.create_collection(name)
 

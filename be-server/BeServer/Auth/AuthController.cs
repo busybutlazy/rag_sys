@@ -1,6 +1,7 @@
 using BeServer.Data;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.AspNetCore.RateLimiting;
 
 namespace BeServer.Auth;
 
@@ -12,6 +13,7 @@ public class AuthController(AppDbContext db, JwtService jwt, IWebHostEnvironment
     private const int RefreshDays = 7;
 
     [HttpPost("login")]
+    [EnableRateLimiting("auth")]
     public async Task<IActionResult> Login([FromBody] LoginRequest req)
     {
         var user = await db.Users.SingleOrDefaultAsync(u => u.Username == req.Username);

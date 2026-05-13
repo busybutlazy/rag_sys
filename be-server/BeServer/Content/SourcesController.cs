@@ -5,6 +5,7 @@ using BeServer.Services;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.AspNetCore.RateLimiting;
 
 namespace BeServer.Content;
 
@@ -58,6 +59,7 @@ public class SourcesController(
 
     [HttpPost]
     [RequestSizeLimit(50 * 1024 * 1024)]
+    [EnableRateLimiting("write")]
     public async Task<IActionResult> Upload(string notebookId, IFormFile file)
     {
         // SEC-03: MIME type allowlist — strip charset/boundary params before checking
