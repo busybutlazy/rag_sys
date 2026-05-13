@@ -108,7 +108,7 @@ public class SourcesController(
             if (s is null) return;
             try
             {
-                await rag.IngestAsync(s.Id, notebookId, filePath, s.MimeType);
+                await rag.IngestAsync(s.Id, notebookId, filePath, s.MimeType ?? mimeType);
                 s.Status = "ingested";
             }
             catch (Exception ex)

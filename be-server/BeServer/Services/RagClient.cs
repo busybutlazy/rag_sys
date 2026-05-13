@@ -55,6 +55,7 @@ public class RagClient(HttpClient http, IConfiguration config)
 
     public async Task<string> RunExperimentAsync(string notebookId, ExperimentRunRequest req)
     {
+        var config = req.Config ?? new ExperimentConfig(["vector", "bm25", "hybrid"]);
         var payload = new
         {
             notebook_id = notebookId,
@@ -62,9 +63,9 @@ public class RagClient(HttpClient http, IConfiguration config)
             queries = req.Queries,
             config = new
             {
-                modes = req.Config.Modes,
-                top_k = req.Config.TopK,
-                alpha = req.Config.Alpha,
+                modes = config.Modes,
+                top_k = config.TopK,
+                alpha = config.Alpha,
             },
         };
         var msg = new HttpRequestMessage(HttpMethod.Post, "/experiments/run")
@@ -97,4 +98,4 @@ public class RagClient(HttpClient http, IConfiguration config)
 }
 
 public record ExperimentConfig(string[] Modes, int TopK = 5, double Alpha = 0.5);
-public record ExperimentRunRequest(string? Name, string[] Queries, ExperimentConfig Config);
+public record ExperimentRunRequest(string? Name, string[] Queries, ExperimentConfig? Config);

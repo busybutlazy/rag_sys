@@ -1,8 +1,8 @@
 import os
-import logging.config
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, HTTPException, Header, Query
 from app.db import get_db
+from app.json_logging import configure_json_logging
 from app.models import (
     BenchmarkResponse,
     ExperimentRecord,
@@ -13,17 +13,7 @@ from app.models import (
 )
 from app import chunker, embedder, experiments, vector_store
 
-logging.config.dictConfig({
-    "version": 1,
-    "disable_existing_loggers": False,
-    "formatters": {
-        "json": {
-            "format": '{"time":"%(asctime)s","level":"%(levelname)s","logger":"%(name)s","message":"%(message)s"}'
-        }
-    },
-    "handlers": {"default": {"class": "logging.StreamHandler", "formatter": "json"}},
-    "root": {"handlers": ["default"], "level": os.environ.get("LOG_LEVEL", "INFO")},
-})
+configure_json_logging()
 
 _INTERNAL_SECRET = os.environ.get("INTERNAL_SECRET", "")
 if not _INTERNAL_SECRET:

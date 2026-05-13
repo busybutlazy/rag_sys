@@ -1,25 +1,15 @@
 import json
-import logging.config
 import os
 from fastapi import Depends, FastAPI, Header
 from fastapi.responses import StreamingResponse
 from app.auth import get_current_user, _JWT_SECRET
 from app.agent import stream_agent_events
 from app.gateway.openai_provider import OpenAIGateway
+from app.json_logging import configure_json_logging
 from app.models import AgentRunRequest, ChatRequest
 from app import rag_client
 
-logging.config.dictConfig({
-    "version": 1,
-    "disable_existing_loggers": False,
-    "formatters": {
-        "json": {
-            "format": '{"time":"%(asctime)s","level":"%(levelname)s","logger":"%(name)s","message":"%(message)s"}'
-        }
-    },
-    "handlers": {"default": {"class": "logging.StreamHandler", "formatter": "json"}},
-    "root": {"handlers": ["default"], "level": os.environ.get("LOG_LEVEL", "INFO")},
-})
+configure_json_logging()
 
 _MIN_SECRET_LEN = 32
 if len(_JWT_SECRET) < _MIN_SECRET_LEN:

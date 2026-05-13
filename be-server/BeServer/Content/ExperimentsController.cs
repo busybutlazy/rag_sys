@@ -42,7 +42,9 @@ public class ExperimentsController(AppDbContext db, RagClient rag) : ControllerB
         if (req.Queries.Any(q => string.IsNullOrWhiteSpace(q) || q.Length > 500))
             return BadRequest(new { error = "Queries must be non-empty and at most 500 characters." });
 
-        var json = await rag.RunExperimentAsync(notebookId, req);
+        var config = req.Config ?? new ExperimentConfig(["vector", "bm25", "hybrid"]);
+        var normalized = req with { Config = config };
+        var json = await rag.RunExperimentAsync(notebookId, normalized);
         return Content(json, "application/json");
     }
 
