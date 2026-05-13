@@ -3,6 +3,10 @@ WORKDIR /app
 COPY package.json package-lock.json* ./
 RUN npm ci
 COPY . .
+ARG VITE_BE_API_URL=/api
+ARG VITE_AI_API_URL=/ai
+ENV VITE_BE_API_URL=${VITE_BE_API_URL}
+ENV VITE_AI_API_URL=${VITE_AI_API_URL}
 RUN npm run build
 
 FROM nginx:1.27-alpine AS runtime

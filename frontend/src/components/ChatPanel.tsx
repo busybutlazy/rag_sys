@@ -4,6 +4,15 @@ interface ChatMessage {
   role: 'user' | 'assistant'
   content: string
   sources?: { source_id: string; chunk_index: number }[]
+  traces?: ToolTrace[]
+}
+
+interface ToolTrace {
+  step: number
+  tool: string
+  arguments?: Record<string, unknown>
+  ok?: boolean
+  summary?: string
 }
 
 interface Props {
@@ -16,6 +25,7 @@ export default function ChatPanel({ notebookId, getToken }: Props) {
   const [input, setInput] = useState('')
   const [streaming, setStreaming] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [agentMode, setAgentMode] = useState(false)
   const abortRef = useRef<AbortController | null>(null)
   const bottomRef = useRef<HTMLDivElement>(null)
 
@@ -39,7 +49,7 @@ export default function ChatPanel({ notebookId, getToken }: Props) {
 
     try {
       const token = getToken()
-      const res = await fetch('/ai/chat/completions', {
+      const res = await fetch(agentMode ? '/ai/agent/run' : '/ai/chat/completions', {
         method: 'POST',
         signal: ctrl.signal,
         credentials: 'include',
@@ -84,6 +94,36 @@ export default function ChatPanel({ notebookId, getToken }: Props) {
                 return next
               })
             }
+            if (parsed.trace) {
+              setMessages(prev => {
+                const next = [...prev]
+                const traces = next[assistantIdx].traces ?? []
+                next[assistantIdx] = {
+                  ...next[assistantIdx],
+                  traces: [...traces, parsed.trace],
+                }
+                return next
+              })
+            }
+            if (parsed.tool_result) {
+              setMessages(prev => {
+                const next = [...prev]
+                const traces = [...(next[assistantIdx].traces ?? [])]
+                const idx = traces.findIndex(
+                  t => t.step === parsed.tool_result.step && t.tool === parsed.tool_result.tool && t.ok === undefined,
+                )
+                const resultTrace = {
+                  step: parsed.tool_result.step,
+                  tool: parsed.tool_result.tool,
+                  ok: parsed.tool_result.ok,
+                  summary: parsed.tool_result.summary,
+                }
+                if (idx >= 0) traces[idx] = { ...traces[idx], ...resultTrace }
+                else traces.push(resultTrace)
+                next[assistantIdx] = { ...next[assistantIdx], traces }
+                return next
+              })
+            }
             if (parsed.token) {
               setMessages(prev => {
                 const next = [...prev]
@@ -115,8 +155,33 @@ export default function ChatPanel({ notebookId, getToken }: Props) {
     abortRef.current?.abort()
   }
 
+  function formatArgs(args?: Record<string, unknown>) {
+    if (!args) return ''
+    const text = JSON.stringify(args)
+    return text.length > 160 ? `${text.slice(0, 157)}...` : text
+  }
+
   return (
     <div className="flex flex-col h-[28rem] border rounded-lg overflow-hidden">
+      <div className="flex items-center justify-between gap-3 border-b bg-white px-3 py-2">
+        <span className="text-sm font-medium text-gray-700">{agentMode ? 'Agent' : 'Chat'}</span>
+        <button
+          type="button"
+          onClick={() => setAgentMode(v => !v)}
+          disabled={streaming}
+          className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors disabled:opacity-50 ${
+            agentMode ? 'bg-blue-600' : 'bg-gray-300'
+          }`}
+          aria-label="Toggle agent mode"
+          title="Toggle agent mode"
+        >
+          <span
+            className={`inline-block h-5 w-5 transform rounded-full bg-white transition-transform ${
+              agentMode ? 'translate-x-5' : 'translate-x-1'
+            }`}
+          />
+        </button>
+      </div>
       <div className="flex-1 overflow-y-auto p-4 space-y-3 bg-gray-50">
         {messages.length === 0 && (
           <p className="text-sm text-gray-400 text-center mt-8">Ask anything about this notebook…</p>
@@ -141,6 +206,35 @@ export default function ChatPanel({ notebookId, getToken }: Props) {
                   {m.sources.map((s, si) => (
                     <li key={si} className="font-mono truncate">
                       {s.source_id.slice(0, 8)}… chunk {s.chunk_index}
+                    </li>
+                  ))}
+                </ul>
+              </details>
+            )}
+            {m.role === 'assistant' && m.traces && m.traces.length > 0 && (
+              <details className="mt-1 text-xs text-gray-500 max-w-[80%]">
+                <summary className="cursor-pointer hover:text-gray-700">
+                  {m.traces.length} agent step{m.traces.length > 1 ? 's' : ''}
+                </summary>
+                <ul className="mt-1 space-y-1 pl-2">
+                  {m.traces.map((t, ti) => (
+                    <li key={ti} className="rounded border bg-white px-2 py-1">
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="font-mono text-gray-700">
+                          {t.step}. {t.tool}
+                        </span>
+                        {t.ok !== undefined && (
+                          <span className={t.ok ? 'text-green-600' : 'text-red-500'}>
+                            {t.ok ? 'ok' : 'error'}
+                          </span>
+                        )}
+                      </div>
+                      {t.arguments && (
+                        <div className="mt-0.5 truncate font-mono text-gray-400">
+                          {formatArgs(t.arguments)}
+                        </div>
+                      )}
+                      {t.summary && <div className="mt-0.5 truncate">{t.summary}</div>}
                     </li>
                   ))}
                 </ul>

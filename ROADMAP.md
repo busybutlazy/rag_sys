@@ -191,13 +191,19 @@
 ## Phase 6 — AI Agent System
 **Goal:** Tool-calling agent loop; tools: search, create_note, list_notebooks, get_source.
 
-- [ ] Agent framework: simple ReAct loop using function-calling
-- [ ] Tools: `search_knowledge`, `create_note`, `list_notebooks`, `get_source_content`
-- [ ] AI server: `POST /agent/run` — runs agent, returns full trace + final answer (SSE)
-- [ ] Notebook-scoped context: agent only searches within the active notebook (or global)
-- [ ] Frontend: agent mode toggle in chat panel; shows tool call trace
+- [x] Agent framework: simple ReAct loop using function-calling
+- [x] Tools: `search_knowledge`, `create_note`, `list_notebooks`, `get_source_content`
+- [x] AI server: `POST /agent/run` — runs agent, returns full trace + final answer (SSE)
+- [x] Notebook-scoped context: agent only searches within the active notebook (or global)
+- [x] Frontend: agent mode toggle in chat panel; shows tool call trace
 
 **Deliverable:** Agent autonomously searches knowledge base, creates a note, and answers with citations.
+
+**Learnings:**
+- Agent system prompts are maintained as Jinja templates under `ai-server/app/prompts/`, keeping prompt changes reviewable outside Python control flow.
+- Tool calls should forward the user's bearer token when crossing into be-server so existing ownership checks remain authoritative.
+- Source-content tools must enforce a model-facing character budget on both joined text and per-chunk payloads; returning full chunks defeats truncation.
+- ArangoDB initialization needs to be idempotent for existing Docker volumes: ensure users, grants, collections, views, and vector indexes at service startup, not only during first container init.
 
 ---
 

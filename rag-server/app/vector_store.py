@@ -4,11 +4,17 @@ from arango.exceptions import IndexCreateError
 from app.embedder import DIMENSIONS
 
 
+def ensure_collections(db) -> None:
+    for name in ["documents", "chunks", "notebooks"]:
+        if not db.has_collection(name):
+            db.create_collection(name)
+
+
 def ensure_vector_index(db) -> None:
     col = db.collection("chunks")
     existing = {idx["type"] for idx in col.indexes()}
     if "vector" not in existing:
-        for attempt in range(10):
+        for attempt in range(30):
             try:
                 col.add_index({
                     "type": "vector",
@@ -21,9 +27,9 @@ def ensure_vector_index(db) -> None:
                 })
                 return
             except IndexCreateError as exc:
-                if "vector index not ready" not in str(exc) or attempt == 9:
+                if "vector index not ready" not in str(exc) or attempt == 29:
                     raise
-                time.sleep(2)
+                time.sleep(5)
 
 
 def ensure_search_view(db) -> None:
@@ -159,3 +165,49 @@ def search_hybrid(
 
     sorted_keys = sorted(scores, key=lambda k: scores[k], reverse=True)
     return [chunk_map[k] for k in sorted_keys[:top_k]]
+
+
+def get_source_content(
+    db,
+    source_id: str,
+    notebook_id: str,
+    max_chars: int = 12000,
+) -> dict:
+    aql = """
+    FOR doc IN chunks
+      FILTER doc.source_id == @source_id
+        AND doc.notebook_id == @notebook_id
+      SORT doc.chunk_index ASC
+      RETURN {
+        source_id: doc.source_id,
+        chunk_index: doc.chunk_index,
+        text: doc.text
+      }
+    """
+    cursor = db.aql.execute(
+        aql,
+        bind_vars={"source_id": source_id, "notebook_id": notebook_id},
+    )
+    chunks = list(cursor)
+    returned_chunks: list[dict] = []
+    text_parts: list[str] = []
+    remaining = max_chars
+    truncated = False
+    for chunk in chunks:
+        if remaining <= 0:
+            truncated = True
+            break
+        original_text = chunk["text"]
+        part = original_text[:remaining]
+        if len(part) < len(original_text):
+            truncated = True
+        text_parts.append(f"[chunk {chunk['chunk_index']}]\n{part}")
+        returned_chunks.append({**chunk, "text": part})
+        remaining -= len(part)
+    return {
+        "source_id": source_id,
+        "notebook_id": notebook_id,
+        "chunks": returned_chunks,
+        "text": "\n\n---\n\n".join(text_parts),
+        "truncated": truncated,
+    }

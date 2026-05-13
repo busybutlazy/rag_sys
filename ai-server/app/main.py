@@ -1,10 +1,11 @@
 import json
 import os
-from fastapi import Depends, FastAPI
+from fastapi import Depends, FastAPI, Header
 from fastapi.responses import StreamingResponse
 from app.auth import get_current_user, _JWT_SECRET
+from app.agent import stream_agent_events
 from app.gateway.openai_provider import OpenAIGateway
-from app.models import ChatRequest
+from app.models import AgentRunRequest, ChatRequest
 from app import rag_client
 
 _MIN_SECRET_LEN = 32
@@ -71,6 +72,24 @@ async def chat_completions(
         try:
             async for token in _gateway.stream_complete(messages, req.model):
                 yield f"data: {json.dumps({'token': token})}\n\n"
+        except Exception as exc:
+            yield f"data: {json.dumps({'error': str(exc)})}\n\n"
+        finally:
+            yield "data: [DONE]\n\n"
+
+    return StreamingResponse(event_stream(), media_type="text/event-stream")
+
+
+@app.post("/agent/run")
+async def agent_run(
+    req: AgentRunRequest,
+    _user_id: str = Depends(get_current_user),
+    authorization: str | None = Header(default=None),
+):
+    async def event_stream():
+        try:
+            async for event in stream_agent_events(req, authorization):
+                yield f"data: {json.dumps(event, ensure_ascii=False)}\n\n"
         except Exception as exc:
             yield f"data: {json.dumps({'error': str(exc)})}\n\n"
         finally:
