@@ -62,6 +62,8 @@
 
 強化階段（Phase 8–15）定義在 `ROADMAP2.md`，涵蓋：Auth session 正確性、攝取可靠性、上傳安全、測試套件、API 可維護性、可擴展性、多用戶隔離與正式部署。
 
+目前備註：聊天對話 session orchestration 已經在 `main` 完成（持久化 chat sessions、messages、requests、tasks，以及前端 session 切換）。這和 Phase 8 的 auth/session hardening 是不同範圍，Phase 8 仍未完成。
+
 ---
 
 ## Vibe Coding 工作流程
@@ -209,7 +211,8 @@ rag_sys/
 功能階段請見 [`ROADMAP.md`](./ROADMAP.md)，強化階段請見 [`ROADMAP2.md`](./ROADMAP2.md)。
 
 **Phase 0–7：** 已完成  
-**Phase 8–15：** 已定義，等待下一輪 Claude Code session 執行
+**聊天對話 sessions：** 已在 `main` 完成  
+**Phase 8–15：** 已定義；下一步建議先做 Phase 8 auth/session hardening
 
 ---
 

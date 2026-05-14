@@ -62,6 +62,8 @@ Only the frontend port is exposed to the host. All inter-service communication h
 
 Hardening phases (8–15) are defined in `ROADMAP2.md` and cover auth session correctness, ingestion reliability, upload security, test suites, API maintainability, extensibility, multi-user isolation, and production deployment.
 
+Current note: chat conversation session orchestration is already implemented on `main` (persisted chat sessions, messages, requests, tasks, and frontend session switching). This is separate from Phase 8 auth/session hardening, which is still open.
+
 ---
 
 ## Vibe Coding Workflow
@@ -209,7 +211,8 @@ rag_sys/
 See [`ROADMAP.md`](./ROADMAP.md) for feature phases and [`ROADMAP2.md`](./ROADMAP2.md) for hardening phases.
 
 **Phases 0–7:** Complete  
-**Phases 8–15:** Defined, ready for the next Claude Code session
+**Chat conversation sessions:** Implemented on `main`  
+**Phases 8–15:** Defined; Phase 8 auth/session hardening is the next recommended step
 
 ---
 

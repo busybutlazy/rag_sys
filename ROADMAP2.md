@@ -30,6 +30,36 @@ Primary review lenses:
 
 ---
 
+## Current Progress Snapshot - 2026-05-14
+
+The chat conversation session slice appears complete in the current `main` branch:
+
+- [x] SQL entities and migration exist for persisted chat orchestration:
+  - `ChatSessions`
+  - `ChatMessages`
+  - `ChatRequests`
+  - `SessionTasks`
+  - `RequestLogs`
+- [x] BE session API exists under `GET/POST /api/notebooks/{notebookId}/chat-sessions`.
+- [x] BE persists user and assistant messages, request metadata, sources, traces, and request logs.
+- [x] BE enforces notebook/session ownership checks inline for chat session listing, creation, messages, tasks, and runs.
+- [x] BE forwards chat/agent runs to the AI server with `request_id`, `session_id`, and active `notebook_id`.
+- [x] AI server exposes internal `POST /session-state/update` and returns a fallback state if the LLM call is unavailable.
+- [x] BE projects returned session state into `SessionTasks` and tracks `ActiveTaskId`.
+- [x] Frontend chat UI supports multiple sessions per notebook and reloads persisted messages.
+
+This does **not** mean Phase 8 is complete. In `ROADMAP2.md`, Phase 8 uses "session" to mean auth/login session correctness. That hardening phase is still open because:
+
+- `/api/auth/refresh` still intentionally returns `501 Not Implemented`.
+- Frontend `AuthContext.refresh()` still calls `/api/auth/refresh`.
+- There is no `refresh_tokens` table or refresh token rotation/revocation flow.
+- Startup guards currently enforce minimum `JWT_SECRET` length, but do not yet reject all default production secrets listed below.
+- Automated auth/session tests are not present.
+
+Next recommended action: complete Phase 8 before Phase 9, either by implementing refresh tokens fully or by removing frontend refresh behavior and documenting short-lived in-memory auth sessions.
+
+---
+
 ## Phase 8 - Auth and Session Hardening
 
 **Goal:** Make login/session behavior explicit, correct, and secure.
@@ -44,7 +74,7 @@ Primary review lenses:
   - [ ] Detect token reuse and revoke the user's active refresh token family.
   - [ ] Keep refresh cookie `HttpOnly`, `SameSite=Strict`, `Secure=true` outside development.
 - [ ] Add startup guards that reject default production secrets:
-  - [ ] `JWT_SECRET`
+  - [ ] `JWT_SECRET` minimum length exists; default production-secret rejection still needed.
   - [ ] `INTERNAL_SECRET`
   - [ ] `ADMIN_PASSWORD`
   - [ ] database passwords when production environment is enabled
@@ -56,6 +86,8 @@ Primary review lenses:
   - [ ] logout behavior
 
 **Deliverable:** User session behavior matches implementation. No frontend calls an endpoint that is intentionally unimplemented.
+
+**Current status (2026-05-14):** Not complete. Auth refresh behavior is still inconsistent: BE returns `501` for `/api/auth/refresh`, while frontend still contains refresh-client logic. Chat conversation sessions are implemented separately and should not be counted as completion of this phase.
 
 **Review references:**
 - `frontend/src/contexts/AuthContext.tsx`
@@ -183,6 +215,8 @@ Primary review lenses:
 ## Phase 12 - API Contracts and Maintainability Refactor
 
 **Goal:** Reduce duplicated controller logic and make service contracts explicit.
+
+**Current status (2026-05-14):** Chat session orchestration is functional, but much of the controller logic remains inline in `ChatSessionsController`. This phase is still a refactor/hardening phase, not a feature-completion phase.
 
 - [ ] Extract BE user/notebook ownership helpers:
   - [ ] Current user id accessor.
@@ -339,4 +373,3 @@ Primary review lenses:
 - Document redaction and PII detection.
 - Evaluation dataset builder for RAG experiments.
 - Admin dashboard for ingestion jobs, failed requests, and usage.
-
