@@ -14,6 +14,8 @@ var builder = WebApplication.CreateBuilder(args);
 builder.Logging.ClearProviders();
 builder.Logging.AddJsonConsole();
 
+ValidateProductionSecrets(builder.Configuration, builder.Environment);
+
 // ── Database ─────────────────────────────────────
 var connStr =
     $"Server={builder.Configuration["DB_HOST"] ?? "localhost"};" +
@@ -150,3 +152,24 @@ static async Task SeedAdminUser(AppDbContext db, IConfiguration config)
         await db.SaveChangesAsync();
     }
 }
+
+static void ValidateProductionSecrets(IConfiguration config, IWebHostEnvironment env)
+{
+    if (env.IsDevelopment()) return;
+
+    RejectDefault("JWT_SECRET", config["JWT_SECRET"], "changeme_32_char_minimum_secret_here");
+    RejectDefault("INTERNAL_SECRET", config["INTERNAL_SECRET"], "changeme_internal_secret_here");
+    RejectDefault("ADMIN_PASSWORD", config["ADMIN_PASSWORD"], "changeme", "changeme_strong_password");
+    RejectDefault("DB_PASSWORD", config["DB_PASSWORD"], "ragpass", "password", "changeme");
+}
+
+static void RejectDefault(string name, string? value, params string[] defaults)
+{
+    if (string.IsNullOrWhiteSpace(value))
+        throw new InvalidOperationException($"{name} is required outside development.");
+
+    if (defaults.Any(defaultValue => string.Equals(value, defaultValue, StringComparison.Ordinal)))
+        throw new InvalidOperationException($"{name} must not use a development default outside development.");
+}
+
+public partial class Program;

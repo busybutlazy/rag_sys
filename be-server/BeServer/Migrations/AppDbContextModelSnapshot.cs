@@ -30,6 +30,26 @@ namespace BeServer.Migrations
                 b.ToTable("Users");
             });
 
+            modelBuilder.Entity("BeServer.Data.Entities.RefreshToken", b =>
+            {
+                b.Property<string>("Id").HasMaxLength(36).HasColumnType("varchar(36)");
+                b.Property<DateTime>("CreatedAt").HasColumnType("datetime");
+                b.Property<string>("CreatedByIp").HasMaxLength(64).HasColumnType("varchar(64)");
+                b.Property<DateTime>("ExpiresAt").HasColumnType("datetime");
+                b.Property<string>("FamilyId").IsRequired().HasMaxLength(36).HasColumnType("varchar(36)");
+                b.Property<string>("ReplacedByTokenId").HasMaxLength(36).HasColumnType("varchar(36)");
+                b.Property<DateTime?>("RevokedAt").HasColumnType("datetime");
+                b.Property<string>("RevokedByIp").HasMaxLength(64).HasColumnType("varchar(64)");
+                b.Property<string>("TokenHash").IsRequired().HasMaxLength(128).HasColumnType("varchar(128)");
+                b.Property<string>("UserId").IsRequired().HasMaxLength(36).HasColumnType("varchar(36)");
+                b.HasKey("Id");
+                b.HasIndex("ExpiresAt");
+                b.HasIndex("FamilyId");
+                b.HasIndex("TokenHash").IsUnique();
+                b.HasIndex("UserId");
+                b.ToTable("RefreshTokens");
+            });
+
             modelBuilder.Entity("BeServer.Data.Entities.Notebook", b =>
             {
                 b.Property<string>("Id").HasMaxLength(36).HasColumnType("varchar(36)");
@@ -188,6 +208,16 @@ namespace BeServer.Migrations
             });
 
             modelBuilder.Entity("BeServer.Data.Entities.Notebook", b =>
+            {
+                b.HasOne("BeServer.Data.Entities.User", "User")
+                    .WithMany()
+                    .HasForeignKey("UserId")
+                    .OnDelete(DeleteBehavior.Cascade)
+                    .IsRequired();
+                b.Navigation("User");
+            });
+
+            modelBuilder.Entity("BeServer.Data.Entities.RefreshToken", b =>
             {
                 b.HasOne("BeServer.Data.Entities.User", "User")
                     .WithMany()
