@@ -6,6 +6,7 @@ namespace BeServer.Data;
 public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(options)
 {
     public DbSet<User> Users { get; set; } = null!;
+    public DbSet<RefreshToken> RefreshTokens { get; set; } = null!;
     public DbSet<Notebook> Notebooks { get; set; } = null!;
     public DbSet<Source> Sources { get; set; } = null!;
     public DbSet<Note> Notes { get; set; } = null!;
@@ -26,6 +27,26 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             e.HasIndex(u => u.Username).IsUnique();
             e.Property(u => u.CreatedAt).HasColumnType("datetime");
             e.Property(u => u.UpdatedAt).HasColumnType("datetime");
+        });
+
+        modelBuilder.Entity<RefreshToken>(e =>
+        {
+            e.HasKey(t => t.Id);
+            e.Property(t => t.Id).HasMaxLength(36);
+            e.Property(t => t.UserId).HasMaxLength(36).IsRequired();
+            e.Property(t => t.TokenHash).HasMaxLength(128).IsRequired();
+            e.Property(t => t.FamilyId).HasMaxLength(36).IsRequired();
+            e.Property(t => t.ExpiresAt).HasColumnType("datetime");
+            e.Property(t => t.RevokedAt).HasColumnType("datetime");
+            e.Property(t => t.ReplacedByTokenId).HasMaxLength(36);
+            e.Property(t => t.CreatedAt).HasColumnType("datetime");
+            e.Property(t => t.CreatedByIp).HasMaxLength(64);
+            e.Property(t => t.RevokedByIp).HasMaxLength(64);
+            e.HasOne(t => t.User).WithMany().HasForeignKey(t => t.UserId).OnDelete(DeleteBehavior.Cascade);
+            e.HasIndex(t => t.TokenHash).IsUnique();
+            e.HasIndex(t => t.UserId);
+            e.HasIndex(t => t.FamilyId);
+            e.HasIndex(t => t.ExpiresAt);
         });
 
         modelBuilder.Entity<Notebook>(e =>

@@ -1,3 +1,5 @@
+using System.Security.Cryptography;
+using BeServer.Data.Entities;
 using BeServer.Data;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -24,22 +26,106 @@ public class AuthController(AppDbContext db, JwtService jwt, IWebHostEnvironment
             return Unauthorized(new { error = "Invalid credentials" });
 
         var accessToken = jwt.GenerateAccessToken(user.Id, user.Username);
-        SetRefreshCookie(jwt.GenerateRefreshToken());
+        var refreshToken = CreateRefreshToken(user.Id, Guid.NewGuid().ToString(), ClientIp());
+        db.RefreshTokens.Add(refreshToken.Entity);
+        await db.SaveChangesAsync();
+
+        SetRefreshCookie(refreshToken.RawToken);
         return Ok(new { accessToken, expiresIn = 900 });
     }
 
-    // SEC-01: /refresh is not implemented until Phase 1-patch adds a refresh_tokens table.
-    // Returning 501 prevents any non-empty cookie from being exchanged for a real token.
     [HttpPost("refresh")]
-    public IActionResult Refresh() =>
-        StatusCode(StatusCodes.Status501NotImplemented,
-            new { error = "Token refresh not yet implemented. Please log in again." });
+    [EnableRateLimiting("auth")]
+    public async Task<IActionResult> Refresh()
+    {
+        if (!Request.Cookies.TryGetValue(RefreshCookie, out var rawToken) || string.IsNullOrWhiteSpace(rawToken))
+            return Unauthorized(new { error = "Missing refresh token" });
+
+        var tokenHash = HashRefreshToken(rawToken);
+        var stored = await db.RefreshTokens
+            .Include(t => t.User)
+            .SingleOrDefaultAsync(t => t.TokenHash == tokenHash);
+
+        if (stored is null)
+        {
+            DeleteRefreshCookie();
+            return Unauthorized(new { error = "Invalid refresh token" });
+        }
+
+        if (stored.RevokedAt is not null)
+        {
+            await RevokeActiveFamily(stored.FamilyId, ClientIp());
+            await db.SaveChangesAsync();
+            DeleteRefreshCookie();
+            return Unauthorized(new { error = "Refresh token reuse detected" });
+        }
+
+        if (stored.ExpiresAt <= DateTime.UtcNow)
+        {
+            stored.RevokedAt = DateTime.UtcNow;
+            stored.RevokedByIp = ClientIp();
+            await db.SaveChangesAsync();
+            DeleteRefreshCookie();
+            return Unauthorized(new { error = "Refresh token expired" });
+        }
+
+        var replacement = CreateRefreshToken(stored.UserId, stored.FamilyId, ClientIp());
+        stored.RevokedAt = DateTime.UtcNow;
+        stored.RevokedByIp = ClientIp();
+        stored.ReplacedByTokenId = replacement.Entity.Id;
+        db.RefreshTokens.Add(replacement.Entity);
+        await db.SaveChangesAsync();
+
+        SetRefreshCookie(replacement.RawToken);
+        var accessToken = jwt.GenerateAccessToken(stored.UserId, stored.User.Username);
+        return Ok(new { accessToken, expiresIn = 900 });
+    }
 
     [HttpPost("logout")]
-    public IActionResult Logout()
+    public async Task<IActionResult> Logout()
     {
-        Response.Cookies.Delete(RefreshCookie);
+        if (Request.Cookies.TryGetValue(RefreshCookie, out var rawToken) && !string.IsNullOrWhiteSpace(rawToken))
+        {
+            var tokenHash = HashRefreshToken(rawToken);
+            var stored = await db.RefreshTokens.SingleOrDefaultAsync(t => t.TokenHash == tokenHash);
+            if (stored is not null && stored.RevokedAt is null)
+            {
+                stored.RevokedAt = DateTime.UtcNow;
+                stored.RevokedByIp = ClientIp();
+                await db.SaveChangesAsync();
+            }
+        }
+
+        DeleteRefreshCookie();
         return Ok(new { message = "Logged out" });
+    }
+
+    private (RefreshToken Entity, string RawToken) CreateRefreshToken(string userId, string familyId, string? clientIp)
+    {
+        var rawToken = jwt.GenerateRefreshToken();
+        var entity = new RefreshToken
+        {
+            UserId = userId,
+            TokenHash = HashRefreshToken(rawToken),
+            FamilyId = familyId,
+            ExpiresAt = DateTime.UtcNow.AddDays(RefreshDays),
+            CreatedAt = DateTime.UtcNow,
+            CreatedByIp = clientIp,
+        };
+        return (entity, rawToken);
+    }
+
+    private async Task RevokeActiveFamily(string familyId, string? clientIp)
+    {
+        var active = await db.RefreshTokens
+            .Where(t => t.FamilyId == familyId && t.RevokedAt == null)
+            .ToListAsync();
+        var now = DateTime.UtcNow;
+        foreach (var token in active)
+        {
+            token.RevokedAt = now;
+            token.RevokedByIp = clientIp;
+        }
     }
 
     private void SetRefreshCookie(string token) =>
@@ -50,6 +136,22 @@ public class AuthController(AppDbContext db, JwtService jwt, IWebHostEnvironment
             SameSite = SameSiteMode.Strict,
             Expires = DateTimeOffset.UtcNow.AddDays(RefreshDays),
         });
+
+    private void DeleteRefreshCookie() =>
+        Response.Cookies.Delete(RefreshCookie, new CookieOptions
+        {
+            HttpOnly = true,
+            Secure = !env.IsDevelopment(),
+            SameSite = SameSiteMode.Strict,
+        });
+
+    private string? ClientIp() => HttpContext.Connection.RemoteIpAddress?.ToString();
+
+    internal static string HashRefreshToken(string token)
+    {
+        var bytes = SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(token));
+        return Convert.ToBase64String(bytes);
+    }
 }
 
 public record LoginRequest(string Username, string Password);

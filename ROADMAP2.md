@@ -48,15 +48,9 @@ The chat conversation session slice appears complete in the current `main` branc
 - [x] BE projects returned session state into `SessionTasks` and tracks `ActiveTaskId`.
 - [x] Frontend chat UI supports multiple sessions per notebook and reloads persisted messages.
 
-This does **not** mean Phase 8 is complete. In `ROADMAP2.md`, Phase 8 uses "session" to mean auth/login session correctness. That hardening phase is still open because:
+This did **not** mean Phase 8 was complete by itself. In `ROADMAP2.md`, Phase 8 uses "session" to mean auth/login session correctness, not chat conversation sessions.
 
-- `/api/auth/refresh` still intentionally returns `501 Not Implemented`.
-- Frontend `AuthContext.refresh()` still calls `/api/auth/refresh`.
-- There is no `refresh_tokens` table or refresh token rotation/revocation flow.
-- Startup guards currently enforce minimum `JWT_SECRET` length, but do not yet reject all default production secrets listed below.
-- Automated auth/session tests are not present.
-
-Next recommended action: complete Phase 8 before Phase 9, either by implementing refresh tokens fully or by removing frontend refresh behavior and documenting short-lived in-memory auth sessions.
+Phase 8 was subsequently implemented on `phase-8-auth-session-hardening` with full refresh token rotation and tests.
 
 ---
 
@@ -64,30 +58,34 @@ Next recommended action: complete Phase 8 before Phase 9, either by implementing
 
 **Goal:** Make login/session behavior explicit, correct, and secure.
 
-- [ ] Decide one short-term auth strategy:
-  - [ ] Option A: implement refresh tokens fully.
+- [x] Decide one short-term auth strategy:
+  - [x] Option A: implement refresh tokens fully.
   - [ ] Option B: remove frontend refresh behavior and document short-lived in-memory sessions.
-- [ ] If implementing refresh tokens:
-  - [ ] Add `refresh_tokens` table with hashed token, user id, expiry, revoked timestamp, created metadata.
-  - [ ] Implement refresh token rotation on every `/api/auth/refresh`.
-  - [ ] Revoke refresh token on logout.
-  - [ ] Detect token reuse and revoke the user's active refresh token family.
-  - [ ] Keep refresh cookie `HttpOnly`, `SameSite=Strict`, `Secure=true` outside development.
-- [ ] Add startup guards that reject default production secrets:
-  - [ ] `JWT_SECRET` minimum length exists; default production-secret rejection still needed.
-  - [ ] `INTERNAL_SECRET`
-  - [ ] `ADMIN_PASSWORD`
-  - [ ] database passwords when production environment is enabled
-- [ ] Add auth tests:
-  - [ ] successful login
-  - [ ] invalid login
-  - [ ] expired access token
-  - [ ] refresh rotation or no-refresh frontend behavior
-  - [ ] logout behavior
+- [x] If implementing refresh tokens:
+  - [x] Add `refresh_tokens` table with hashed token, user id, expiry, revoked timestamp, created metadata.
+  - [x] Implement refresh token rotation on every `/api/auth/refresh`.
+  - [x] Revoke refresh token on logout.
+  - [x] Detect token reuse and revoke the user's active refresh token family.
+  - [x] Keep refresh cookie `HttpOnly`, `SameSite=Strict`, `Secure=true` outside development.
+- [x] Add startup guards that reject default production secrets:
+  - [x] `JWT_SECRET`
+  - [x] `INTERNAL_SECRET`
+  - [x] `ADMIN_PASSWORD`
+  - [x] database passwords when production environment is enabled
+- [x] Add auth tests:
+  - [x] successful login
+  - [x] invalid login
+  - [x] expired access token
+  - [x] refresh rotation or no-refresh frontend behavior
+  - [x] logout behavior
 
 **Deliverable:** User session behavior matches implementation. No frontend calls an endpoint that is intentionally unimplemented.
 
-**Current status (2026-05-14):** Not complete. Auth refresh behavior is still inconsistent: BE returns `501` for `/api/auth/refresh`, while frontend still contains refresh-client logic. Chat conversation sessions are implemented separately and should not be counted as completion of this phase.
+**Current status (2026-05-14):** Implemented on `phase-8-auth-session-hardening`. BE now stores hashed refresh tokens, rotates them on refresh, revokes them on logout, revokes the active family on token reuse, and rejects development defaults outside `Development`. Focused auth tests cover login, invalid login, expired access token validation, refresh rotation/reuse, and logout.
+
+**Verification:**
+- `docker run --rm -v /home/jett/Documents/rag_sys/be-server:/src -w /src mcr.microsoft.com/dotnet/sdk:8.0 dotnet test BeServer.Tests/BeServer.Tests.csproj --logger "console;verbosity=normal"`
+- `docker compose build be-server`
 
 **Review references:**
 - `frontend/src/contexts/AuthContext.tsx`
