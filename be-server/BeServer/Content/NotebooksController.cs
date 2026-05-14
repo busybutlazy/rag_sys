@@ -48,7 +48,24 @@ public class NotebooksController(AppDbContext db) : ControllerBase
             .Select(n => new
             {
                 n.Id, n.Name, n.Description, n.Archived, n.CreatedAt, n.UpdatedAt,
-                Sources = n.Sources.Select(s => new { s.Id, s.Title, s.MimeType, s.Status, s.CreatedAt }),
+                Sources = n.Sources.Select(s => new SourceDto(
+                    s.Id,
+                    s.Title,
+                    s.MimeType,
+                    s.FileSizeBytes,
+                    s.Status,
+                    s.CreatedAt,
+                    db.IngestionJobs
+                        .Where(j => j.SourceId == s.Id && j.JobType == IngestionJobTypes.Ingest)
+                        .OrderByDescending(j => j.CreatedAt)
+                        .Select(j => new IngestionJobDto(
+                            j.Id,
+                            j.Status,
+                            j.AttemptCount,
+                            j.MaxAttempts,
+                            j.LastError,
+                            j.UpdatedAt))
+                        .FirstOrDefault())),
                 Notes = n.Notes.Select(nt => new { nt.Id, nt.Title, nt.NoteType, nt.CreatedAt }),
             })
             .FirstOrDefaultAsync();

@@ -8,7 +8,20 @@ import NotebookSourcesPanel from '../components/NotebookSourcesPanel'
 import NotebookNotesPanel from '../components/NotebookNotesPanel'
 import NotebookRetrievalPanel from '../components/NotebookRetrievalPanel'
 
-interface Source { id: string; title: string; mimeType: string; status: string }
+interface Source {
+  id: string
+  title: string
+  mimeType: string
+  status: string
+  ingestionJob?: {
+    id: string
+    status: string
+    attemptCount: number
+    maxAttempts: number
+    lastError?: string | null
+    updatedAt: string
+  } | null
+}
 interface Note { id: string; title?: string; noteType: string; createdAt: string }
 interface NotebookDetail {
   id: string; name: string; description?: string
@@ -36,9 +49,21 @@ export default function NotebookDetailPage() {
   const [tabNavOpen, setTabNavOpen] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
-  const reload = () => apiGet<NotebookDetail>(`/api/notebooks/${id}`).then(setNb)
+  const reload = useCallback(() => apiGet<NotebookDetail>(`/api/notebooks/${id}`).then(setNb), [id])
 
-  useEffect(() => { reload() }, [id])
+  useEffect(() => { reload() }, [reload])
+
+  const hasActiveIngestion = nb?.sources.some(source =>
+    ['queued', 'running', 'retrying'].includes(source.ingestionJob?.status ?? source.status)
+  ) ?? false
+
+  useEffect(() => {
+    if (!hasActiveIngestion) return
+    const timer = window.setInterval(() => {
+      reload().catch(err => console.error('Source status refresh failed', err))
+    }, 5000)
+    return () => window.clearInterval(timer)
+  }, [hasActiveIngestion, reload])
 
   async function uploadFile(file: File) {
     try {
@@ -186,7 +211,7 @@ export default function NotebookDetailPage() {
                 </div>
                 <div className="metric-tile">
                   <span>Ready files</span>
-                  <strong>{nb.sources.filter(s => s.status === 'ready').length}</strong>
+                  <strong>{nb.sources.filter(s => s.status === 'ingested' || s.ingestionJob?.status === 'succeeded').length}</strong>
                 </div>
               </div>
               <div className="mt-5 grid gap-3 lg:grid-cols-3">

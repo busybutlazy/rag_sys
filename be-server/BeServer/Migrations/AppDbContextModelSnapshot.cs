@@ -83,6 +83,30 @@ namespace BeServer.Migrations
                 b.ToTable("Sources");
             });
 
+            modelBuilder.Entity("BeServer.Data.Entities.IngestionJob", b =>
+            {
+                b.Property<string>("Id").HasMaxLength(36).HasColumnType("varchar(36)");
+                b.Property<int>("AttemptCount").HasColumnType("int");
+                b.Property<DateTime?>("AvailableAt").HasColumnType("datetime");
+                b.Property<DateTime?>("CompletedAt").HasColumnType("datetime");
+                b.Property<DateTime>("CreatedAt").HasColumnType("datetime");
+                b.Property<string>("JobType").IsRequired().HasMaxLength(32).HasColumnType("varchar(32)");
+                b.Property<string>("LastError").HasColumnType("text");
+                b.Property<int>("MaxAttempts").HasColumnType("int");
+                b.Property<string>("NotebookId").IsRequired().HasMaxLength(36).HasColumnType("varchar(36)");
+                b.Property<string>("SourceId").IsRequired().HasMaxLength(36).HasColumnType("varchar(36)");
+                b.Property<DateTime?>("StartedAt").HasColumnType("datetime");
+                b.Property<string>("Status").IsRequired().HasMaxLength(32).HasColumnType("varchar(32)");
+                b.Property<DateTime>("UpdatedAt").HasColumnType("datetime");
+                b.Property<string>("UserId").IsRequired().HasMaxLength(36).HasColumnType("varchar(36)");
+                b.HasKey("Id");
+                b.HasIndex("NotebookId");
+                b.HasIndex("SourceId");
+                b.HasIndex("Status", "JobType", "AvailableAt");
+                b.HasIndex("UserId", "NotebookId");
+                b.ToTable("IngestionJobs");
+            });
+
             modelBuilder.Entity("BeServer.Data.Entities.Note", b =>
             {
                 b.Property<string>("Id").HasMaxLength(36).HasColumnType("varchar(36)");
@@ -247,6 +271,22 @@ namespace BeServer.Migrations
             {
                 b.HasOne("BeServer.Data.Entities.Notebook", "Notebook")
                     .WithMany("Notes")
+                    .HasForeignKey("NotebookId")
+                    .OnDelete(DeleteBehavior.Cascade)
+                    .IsRequired();
+                b.HasOne("BeServer.Data.Entities.User", "User")
+                    .WithMany()
+                    .HasForeignKey("UserId")
+                    .OnDelete(DeleteBehavior.Cascade)
+                    .IsRequired();
+                b.Navigation("Notebook");
+                b.Navigation("User");
+            });
+
+            modelBuilder.Entity("BeServer.Data.Entities.IngestionJob", b =>
+            {
+                b.HasOne("BeServer.Data.Entities.Notebook", "Notebook")
+                    .WithMany()
                     .HasForeignKey("NotebookId")
                     .OnDelete(DeleteBehavior.Cascade)
                     .IsRequired();

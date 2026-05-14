@@ -52,6 +52,8 @@ This did **not** mean Phase 8 was complete by itself. In `ROADMAP2.md`, Phase 8 
 
 Phase 8 was subsequently implemented on `phase-8-auth-session-hardening` with full refresh token rotation and tests.
 
+Phase 9 was implemented on `phase-9-reliable-ingestion-jobs`. Source uploads now create durable SQL ingestion jobs that are processed by a BE hosted worker, with retry/error state visible in the API and frontend.
+
 ---
 
 ## Phase 8 - Auth and Session Hardening
@@ -97,36 +99,43 @@ Phase 8 was subsequently implemented on `phase-8-auth-session-hardening` with fu
 
 **Goal:** Replace fire-and-forget ingestion with durable, observable jobs.
 
-- [ ] Add an `ingestion_jobs` SQL table:
-  - [ ] id
-  - [ ] source_id
-  - [ ] notebook_id
-  - [ ] user_id
-  - [ ] status: `queued`, `running`, `succeeded`, `failed`, `retrying`, `cancelled`
-  - [ ] attempt count
-  - [ ] max attempts
-  - [ ] last error
-  - [ ] timestamps
-- [ ] Update source upload flow:
-  - [ ] Save source record.
-  - [ ] Write file.
-  - [ ] Create ingestion job.
-  - [ ] Return source and job status to frontend.
-- [ ] Add a BE background worker or dedicated worker service:
-  - [ ] Picks queued jobs.
-  - [ ] Calls RAG `/ingest`.
-  - [ ] Retries transient failures with backoff.
-  - [ ] Updates `sources.status` from job result.
-  - [ ] Handles graceful shutdown.
-- [ ] Add job visibility:
-  - [ ] `GET /api/notebooks/{id}/sources` includes current ingestion status.
-  - [ ] Optional endpoint for source/job details.
-  - [ ] Frontend displays queued/running/error states.
-- [ ] Add cleanup behavior:
-  - [ ] If file write fails after DB insert, mark source/job failed or remove record in a transaction-safe way.
-  - [ ] If RAG delete fails, record cleanup debt instead of only logging to stderr.
+- [x] Add an `ingestion_jobs` SQL table:
+  - [x] id
+  - [x] source_id
+  - [x] notebook_id
+  - [x] user_id
+  - [x] status: `queued`, `running`, `succeeded`, `failed`, `retrying`, `cancelled`
+  - [x] attempt count
+  - [x] max attempts
+  - [x] last error
+  - [x] timestamps
+- [x] Update source upload flow:
+  - [x] Save source record.
+  - [x] Write file.
+  - [x] Create ingestion job.
+  - [x] Return source and job status to frontend.
+- [x] Add a BE background worker or dedicated worker service:
+  - [x] Picks queued jobs.
+  - [x] Calls RAG `/ingest`.
+  - [x] Retries transient failures with backoff.
+  - [x] Updates `sources.status` from job result.
+  - [x] Handles graceful shutdown.
+- [x] Add job visibility:
+  - [x] `GET /api/notebooks/{id}/sources` includes current ingestion status.
+  - [x] Optional endpoint for source/job details.
+  - [x] Frontend displays queued/running/error states.
+- [x] Add cleanup behavior:
+  - [x] If file write fails after DB insert, mark source/job failed or remove record in a transaction-safe way.
+  - [x] If RAG delete fails, record cleanup debt instead of only logging to stderr.
 
 **Deliverable:** Upload ingestion survives normal service lifecycle events and has inspectable status.
+
+**Current status (2026-05-14):** Implemented on `phase-9-reliable-ingestion-jobs`. BE now creates SQL-backed ingestion jobs on upload, processes them with `IngestionJobWorker`, records retry/failure metadata, cancels active jobs when a source is deleted, and records failed RAG-delete cleanup debt. Source list/detail responses include current ingestion job metadata, and the frontend displays/polls queued, running, retrying, ready, failed, and cancelled states.
+
+**Verification:**
+- `docker run --rm -v /home/jett/Documents/rag_sys/be-server:/src -w /src mcr.microsoft.com/dotnet/sdk:8.0 dotnet test BeServer.Tests/BeServer.Tests.csproj --logger "console;verbosity=normal"`
+- `npm run build` in `frontend/`
+- `docker compose build be-server frontend`
 
 **Review references:**
 - `be-server/BeServer/Content/SourcesController.cs`
