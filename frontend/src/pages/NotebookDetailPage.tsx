@@ -33,6 +33,7 @@ export default function NotebookDetailPage() {
   const [noteContent, setNoteContent] = useState('')
   const [noteTitle, setNoteTitle] = useState('')
   const [activeTab, setActiveTab] = useState<WorkspaceTab>('overview')
+  const [tabNavOpen, setTabNavOpen] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
   const reload = () => apiGet<NotebookDetail>(`/api/notebooks/${id}`).then(setNb)
@@ -97,21 +98,72 @@ export default function NotebookDetailPage() {
         {error && <p className="rounded-md border border-red-100 bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
       </header>
 
-      <div className="grid gap-5 lg:grid-cols-[16rem_minmax(0,1fr)]">
-        <aside className="lg:sticky lg:top-8 lg:self-start">
-          <nav className="flex gap-2 overflow-x-auto rounded-lg border border-stone-200 bg-white p-2 shadow-sm lg:flex-col lg:overflow-visible">
-            {tabs.map(tab => (
+      <div
+        className="grid gap-5"
+        style={{
+          gridTemplateColumns: tabNavOpen ? '14rem minmax(0,1fr)' : '2.25rem minmax(0,1fr)',
+          transition: 'grid-template-columns 0.24s ease',
+        }}
+      >
+        <aside className="lg:sticky lg:top-8 lg:self-start" style={{ overflow: 'hidden' }}>
+          {/* Collapsed sliver — just the toggle */}
+          {!tabNavOpen ? (
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.5rem' }}>
               <button
-                key={tab.id}
                 type="button"
-                onClick={() => setActiveTab(tab.id)}
-                className={`workspace-tab ${activeTab === tab.id ? 'workspace-tab-active' : ''}`}
-              >
-                <span>{tab.label}</span>
-                <small>{tab.hint}</small>
-              </button>
-            ))}
-          </nav>
+                onClick={() => setTabNavOpen(true)}
+                title="Expand panel"
+                style={{
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  width: '2.25rem', height: '2.25rem',
+                  border: '1px solid var(--ink-rule)', borderRadius: '0.4rem',
+                  background: 'transparent', cursor: 'pointer',
+                  color: 'var(--ink-soft)', fontSize: '0.8rem',
+                  transition: 'color 0.18s',
+                }}
+              >›</button>
+              <div style={{
+                writingMode: 'vertical-rl', textOrientation: 'mixed',
+                fontSize: '0.62rem', fontWeight: 500, letterSpacing: '0.12em',
+                textTransform: 'uppercase', color: 'var(--ink-soft)',
+                transform: 'rotate(180deg)', marginTop: '0.5rem',
+              }}>
+                {tabs.find(t => t.id === activeTab)?.label}
+              </div>
+            </div>
+          ) : (
+            <nav
+              className="rounded-lg border border-stone-200 bg-white shadow-sm"
+              style={{ display: 'flex', flexDirection: 'column', padding: '0.5rem' }}
+            >
+              <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '0.25rem' }}>
+                <button
+                  type="button"
+                  onClick={() => setTabNavOpen(false)}
+                  title="Collapse panel"
+                  style={{
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    width: '1.6rem', height: '1.6rem',
+                    border: 'none', borderRadius: '0.3rem',
+                    background: 'transparent', cursor: 'pointer',
+                    color: 'var(--ink-soft)', fontSize: '0.75rem',
+                    transition: 'color 0.18s',
+                  }}
+                >‹</button>
+              </div>
+              {tabs.map(tab => (
+                <button
+                  key={tab.id}
+                  type="button"
+                  onClick={() => { setActiveTab(tab.id); if (tab.id === 'chat') setTabNavOpen(false); }}
+                  className={`workspace-tab ${activeTab === tab.id ? 'workspace-tab-active' : ''}`}
+                >
+                  <span>{tab.label}</span>
+                  <small>{tab.hint}</small>
+                </button>
+              ))}
+            </nav>
+          )}
         </aside>
 
         <div className="min-w-0">
@@ -156,7 +208,7 @@ export default function NotebookDetailPage() {
                 </button>
                 <button
                   type="button"
-                  onClick={() => setActiveTab('chat')}
+                  onClick={() => { setActiveTab('chat'); setTabNavOpen(false); }}
                   className="quick-action"
                 >
                   <span>Ask questions</span>

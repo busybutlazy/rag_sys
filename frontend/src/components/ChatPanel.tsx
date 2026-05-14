@@ -39,6 +39,7 @@ export default function ChatPanel({ notebookId, getToken }: Props) {
   const [streaming, setStreaming] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
+  const [sessionsOpen, setSessionsOpen] = useState(true)
   const abortRef = useRef<AbortController | null>(null)
   const bottomRef = useRef<HTMLDivElement>(null)
 
@@ -256,37 +257,102 @@ export default function ChatPanel({ notebookId, getToken }: Props) {
     return text.length > 160 ? `${text.slice(0, 157)}...` : text
   }
 
+  const activeSessionTitle = sessions.find(s => s.id === activeSessionId)?.title ?? 'New chat'
+
   return (
-    <div className="grid min-h-[42rem] overflow-hidden rounded-lg bg-white lg:grid-cols-[15rem_minmax(0,1fr)]">
-      <aside className="border-b border-stone-200 bg-stone-50 p-3 lg:border-b-0 lg:border-r">
-        <div className="mb-3 flex items-center justify-between gap-2">
-          <div>
-            <p className="eyebrow">Chat</p>
-            <h2 className="text-sm font-semibold text-stone-800">Sessions</h2>
-          </div>
-          <button type="button" onClick={addSession} disabled={streaming} className="ui-button ui-button-secondary h-8 px-2 text-xs">
-            New
-          </button>
-        </div>
-        <div className="flex gap-2 overflow-x-auto lg:flex-col lg:overflow-visible">
-          {sessions.map(session => (
+    <div
+      className="min-h-[42rem] overflow-hidden rounded-lg bg-paper"
+      style={{
+        display: 'grid',
+        gridTemplateColumns: sessionsOpen ? '14rem minmax(0,1fr)' : '2.5rem minmax(0,1fr)',
+        transition: 'grid-template-columns 0.24s ease',
+      }}
+    >
+      <aside
+        style={{
+          borderRight: '1px solid var(--ink-rule)',
+          background: '#F7F9FB',
+          overflow: 'hidden',
+          display: 'flex',
+          flexDirection: 'column',
+        }}
+      >
+        {sessionsOpen ? (
+          <>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0.75rem 0.75rem 0.5rem', flexShrink: 0 }}>
+              <div>
+                <p className="eyebrow">Chat</p>
+                <h2 style={{ fontSize: '0.8rem', fontWeight: 500, color: 'var(--ink)', marginTop: '0.1rem' }}>Sessions</h2>
+              </div>
+              <div style={{ display: 'flex', gap: '0.35rem', alignItems: 'center' }}>
+                <button type="button" onClick={addSession} disabled={streaming} className="ui-button ui-button-secondary" style={{ height: '1.8rem', padding: '0 0.6rem', fontSize: '0.72rem' }}>
+                  New
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setSessionsOpen(false)}
+                  title="Collapse sessions"
+                  style={{
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    width: '1.6rem', height: '1.6rem', border: 'none',
+                    borderRadius: '0.3rem', background: 'transparent',
+                    cursor: 'pointer', color: 'var(--ink-soft)', fontSize: '0.75rem',
+                    transition: 'color 0.18s',
+                  }}
+                >‹</button>
+              </div>
+            </div>
+            <div style={{ flex: 1, overflowY: 'auto', padding: '0 0.5rem 0.75rem' }}>
+              {sessions.map(session => (
+                <button
+                  key={session.id}
+                  type="button"
+                  onClick={() => { setActiveSessionId(session.id); setError(null) }}
+                  style={{
+                    display: 'block', width: '100%', textAlign: 'left',
+                    padding: '0.5rem 0.6rem', borderRadius: '0.4rem',
+                    border: 'none', cursor: 'pointer',
+                    background: activeSessionId === session.id ? 'var(--paper)' : 'transparent',
+                    boxShadow: activeSessionId === session.id ? '0 1px 3px rgba(0,0,0,0.07)' : 'none',
+                    transition: 'background 0.15s',
+                    marginBottom: '0.2rem',
+                  }}
+                  onMouseEnter={e => { if (activeSessionId !== session.id) e.currentTarget.style.background = 'var(--tint)' }}
+                  onMouseLeave={e => { if (activeSessionId !== session.id) e.currentTarget.style.background = 'transparent' }}
+                >
+                  <p style={{ fontSize: '0.8rem', fontWeight: 500, color: 'var(--ink)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{session.title ?? 'New chat'}</p>
+                  <p style={{ fontSize: '0.68rem', color: 'var(--ink-soft)', marginTop: '0.15rem' }}>{session.messageCount} messages</p>
+                </button>
+              ))}
+              {!loading && sessions.length === 0 && <div className="empty-state">No sessions.</div>}
+            </div>
+          </>
+        ) : (
+          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', paddingTop: '0.75rem', gap: '0.5rem' }}>
             <button
-              key={session.id}
               type="button"
-              onClick={() => {
-                setActiveSessionId(session.id)
-                setError(null)
+              onClick={() => setSessionsOpen(true)}
+              title="Expand sessions"
+              style={{
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                width: '1.8rem', height: '1.8rem', border: '1px solid var(--ink-rule)',
+                borderRadius: '0.3rem', background: 'transparent',
+                cursor: 'pointer', color: 'var(--ink-soft)', fontSize: '0.75rem',
+                transition: 'color 0.18s',
               }}
-              className={`min-w-[11rem] rounded-md px-3 py-2 text-left transition lg:min-w-0 ${
-                activeSessionId === session.id ? 'bg-white shadow-sm' : 'hover:bg-stone-100'
-              }`}
-            >
-              <p className="truncate text-sm font-medium text-stone-800">{session.title ?? 'New chat'}</p>
-              <p className="mt-1 text-xs text-stone-400">{session.messageCount} messages</p>
-            </button>
-          ))}
-          {!loading && sessions.length === 0 && <div className="empty-state">No sessions.</div>}
-        </div>
+            >›</button>
+            <div style={{
+              writingMode: 'vertical-rl', textOrientation: 'mixed',
+              fontSize: '0.6rem', fontWeight: 500, letterSpacing: '0.12em',
+              textTransform: 'uppercase', color: 'var(--ink-soft)',
+              transform: 'rotate(180deg)', marginTop: '0.25rem',
+              whiteSpace: 'nowrap', overflow: 'hidden', maxHeight: '7rem',
+              textOverflow: 'ellipsis',
+            }}>
+              {activeSessionTitle}
+            </div>
+          </div>
+        )}
       </aside>
 
       <div className="flex min-w-0 flex-col">
@@ -313,7 +379,7 @@ export default function ChatPanel({ notebookId, getToken }: Props) {
           </button>
         </div>
 
-        <div className="min-h-0 flex-1 overflow-y-auto bg-stone-50/70 p-4">
+        <div className="min-h-0 flex-1 overflow-y-auto p-4" style={{ background: '#F1F4F7' }}>
           {activeMessages.length === 0 && (
             <div className="empty-state mt-8">Ask anything about this notebook.</div>
           )}
@@ -323,7 +389,7 @@ export default function ChatPanel({ notebookId, getToken }: Props) {
                 <div
                   className={`max-w-[86%] rounded-lg px-3 py-2 text-sm leading-6 shadow-sm ${
                     message.role === 'user'
-                      ? 'bg-stone-900 text-white'
+                      ? 'bg-rail text-white'
                       : 'border border-stone-200 bg-white text-stone-800'
                   } whitespace-pre-wrap break-words`}
                 >
@@ -379,7 +445,7 @@ export default function ChatPanel({ notebookId, getToken }: Props) {
           <div ref={bottomRef} />
         </div>
 
-        <form onSubmit={send} className="flex gap-2 border-t border-stone-200 bg-white p-3">
+        <form onSubmit={send} className="flex gap-2 border-t border-stone-200 bg-paper p-3">
           <input
             value={input}
             onChange={e => setInput(e.target.value)}

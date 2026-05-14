@@ -38,9 +38,13 @@ export default function LoginPage() {
   return (
     <div className="login-page">
       <div className="login-visual" aria-hidden="true">
-        <div className="login-arch">
-          <span>Knowledge</span>
-          <span>Desk</span>
+        <div className="login-arch" />
+        <div className="login-display">
+          <p className="login-display-label">Knowledge Management System</p>
+          <h2 className="login-display-text">
+            Knowledge
+            <span className="login-display-sub">Desk</span>
+          </h2>
         </div>
       </div>
       <div className="login-panel">
