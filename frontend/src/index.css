@@ -1,3 +1,850 @@
+@import url('https://fonts.googleapis.com/css2?family=Albert+Sans:ital,wght@0,200;0,300;0,400;0,500;1,200&display=swap');
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+/* ─────────────────────────────────────────────────────
+   Re Loop CSS System — transposed for Knowledge Desk
+   Source reference: re-loop.jp (Albert Sans + Zen Kaku)
+───────────────────────────────────────────────────── */
+
+@layer base {
+  :root {
+    --ink:        #4F545A;   /* Re Loop primary text */
+    --ink-soft:   #737B84;   /* Re Loop secondary */
+    --ink-rule:   #D2D2D2;   /* Re Loop separator */
+    --ink-border: rgba(79, 84, 90, 0.2);
+    --paper:      #ffffff;   /* Re Loop background — pure white */
+    --rail-bg:    #4F545A;   /* sidebar */
+    --rail-hover: #737B84;
+  }
+
+  html, body {
+    background-color: var(--paper);
+  }
+
+  body {
+    margin: 0;
+    min-width: 320px;
+    color: var(--ink);
+    font-family: "Albert Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    font-size: 1rem;
+    font-weight: 400;
+    line-height: 1.8;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    scrollbar-width: none;
+  }
+
+  body::-webkit-scrollbar { display: none; }
+
+  * { box-sizing: border-box; }
+
+  ::selection { background: rgba(79, 84, 90, 0.12); }
+
+  h1, h2, h3, h4, h5, h6 { font-weight: 400; }
+
+  a { color: inherit; text-decoration: none; }
+
+  button { cursor: pointer; font-family: inherit; background: transparent; border: none; }
+}
+
+/* ═══════════════════════════════════════════════════
+   UTILITY — direct from Re Loop's class system
+═══════════════════════════════════════════════════ */
+
+@layer components {
+
+  .exl, .exl * { font-weight: 200; }
+  .medium, .medium * { font-weight: 500; }
+  .en, .en * { font-family: "Albert Sans", -apple-system, sans-serif; }
+
+  .vertical-text {
+    writing-mode: vertical-rl;
+    -webkit-writing-mode: vertical-rl;
+    line-height: 0.9;
+    white-space: nowrap;
+  }
+
+  /* ── Arrow link — Re Loop's .arrow pattern ────── */
+  .arrow-link {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    gap: 1rem;
+    transition: opacity 0.2s ease;
+  }
+
+  .arrow-i {
+    position: relative;
+    display: inline-block;
+    width: 2.2rem;
+    height: 1.4rem;
+    flex-shrink: 0;
+    overflow: hidden;
+  }
+
+  .arrow-i::before {
+    content: "";
+    position: absolute;
+    top: 0; right: 0; bottom: 0;
+    margin: auto;
+    width: 100%;
+    height: 1.4rem;
+    background: var(--ink-soft);
+    border-radius: 2rem;
+    transform-origin: right;
+    transition: width 0.2s ease, border-radius 0.2s ease;
+  }
+
+  .arrow-i::after {
+    content: "→";
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    padding-right: 0.25rem;
+    font-size: 0.76rem;
+    color: var(--paper);
+    font-family: "Albert Sans", sans-serif;
+    transition: transform 0.2s ease;
+    z-index: 1;
+  }
+
+  .arrow-link:hover .arrow-i::before { width: 1.4rem; border-radius: 50%; }
+  .arrow-link:hover .arrow-i::after  { transform: translateX(0.2rem); }
+
+  /* ── Underline hover — Re Loop's .underline ────── */
+  .hover-underline {
+    position: relative;
+    display: inline-block;
+  }
+
+  .hover-underline::before {
+    content: "";
+    position: absolute;
+    left: 0; right: 0; bottom: 0;
+    height: 1px;
+    background: var(--ink-rule);
+  }
+
+  .hover-underline::after {
+    content: "";
+    position: absolute;
+    left: 0; right: 0; bottom: 0;
+    height: 1px;
+    background: var(--ink);
+    transform: scaleX(0);
+    transform-origin: right;
+    transition: transform 0.2s 0.05s ease, transform-origin 0s linear;
+    z-index: 1;
+  }
+
+  .hover-underline:hover::after {
+    transform: scaleX(1);
+    transform-origin: left;
+  }
+
+  /* ─────────────────────────────────────────────────
+     APP SHELL — Re Loop's .main_header transposed
+  ───────────────────────────────────────────────── */
+
+  .app-shell { min-height: 100vh; }
+
+  .shell-rail {
+    position: fixed;
+    top: 3vh;
+    left: 0;
+    bottom: 3vh;
+    z-index: 30;
+    display: flex;
+    width: 9rem;
+    min-height: 36rem;
+    flex-direction: column;
+    align-items: center;
+    background: var(--rail-bg);
+    border-radius: 0 0.5rem 0.5rem 0;
+    overflow: hidden;
+    transition: width 0.24s ease;
+  }
+
+  /* Collapsed rail — just shows the toggle sliver */
+  .shell-rail-collapsed {
+    width: 2rem;
+    min-height: 0;
+  }
+
+  /* Toggle button inside rail */
+  .shell-rail-toggle {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 100%;
+    padding: 0.8rem 0;
+    color: rgba(255, 255, 255, 0.45);
+    font-size: 0.7rem;
+    border: none;
+    background: transparent;
+    cursor: pointer;
+    transition: color 0.18s ease;
+    flex-shrink: 0;
+  }
+
+  .shell-rail-toggle:hover {
+    color: rgba(255, 255, 255, 0.85);
+  }
+
+  /* Smooth margin transition on main content */
+  .app-main {
+    transition: margin-left 0.24s ease;
+  }
+
+  .shell-brand {
+    display: flex;
+    width: 100%;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.6rem;
+    padding: 2rem 0.75rem 1.6rem;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.15);
+    background: none;
+    border-left: none;
+    border-right: none;
+    border-top: none;
+  }
+
+  /* The arch — Re Loop's signature border-radius */
+  .shell-brand-mark {
+    display: grid;
+    width: 3.6rem;
+    height: 4.6rem;
+    place-items: center;
+    border: 1px solid rgba(255, 255, 255, 0.3);
+    border-radius: 999px 999px 0.4rem 0.4rem;
+    font-size: 0.7rem;
+    font-weight: 500;
+    letter-spacing: 0.1em;
+    color: #ffffff;
+    transition: border-color 0.2s ease;
+  }
+
+  .shell-brand:hover .shell-brand-mark {
+    border-color: rgba(255, 255, 255, 0.6);
+  }
+
+  .shell-brand-text {
+    font-size: 0.62rem;
+    font-weight: 300;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: rgba(255, 255, 255, 0.38);
+    text-align: center;
+    line-height: 1.3;
+    max-width: 5.5rem;
+  }
+
+  .shell-nav {
+    display: flex;
+    flex: 1;
+    flex-direction: column;
+    justify-content: center;
+    gap: 0;
+    padding: 1rem 0;
+  }
+
+  /* Mirrors Re Loop's nav — vertical text, right border indicator */
+  .shell-link {
+    position: relative;
+    display: inline-block;
+    width: 1.3rem;
+    padding: 1.1rem 1.9rem;
+    color: rgba(255, 255, 255, 0.55);
+    font-size: 0.78rem;
+    font-weight: 400;
+    letter-spacing: 0.06em;
+    line-height: 1.2;
+    writing-mode: vertical-rl;
+    text-decoration: none;
+    transition: color 0.2s ease;
+  }
+
+  .shell-link::after {
+    content: "";
+    position: absolute;
+    top: 0;
+    right: 0.4rem;
+    bottom: 0;
+    width: 2px;
+    height: 100%;
+    background: #ffffff;
+    opacity: 0;
+    transform: scaleY(0.3);
+    transform-origin: bottom;
+    transition: opacity 0.28s ease, transform 0.28s ease;
+    border-radius: 1px;
+  }
+
+  .shell-link:hover { color: rgba(255, 255, 255, 0.88); }
+
+  .shell-link-active { color: #ffffff; }
+  .shell-link-active::after { opacity: 1; transform: scaleY(1); }
+
+  .shell-account {
+    display: flex;
+    width: 100%;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 1.2rem 0.75rem 1.6rem;
+    border-top: 1px solid rgba(255, 255, 255, 0.15);
+  }
+
+  .shell-account span {
+    max-width: 6.5rem;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: 0.62rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: rgba(255, 255, 255, 0.3);
+  }
+
+  /* Re Loop: main padding-left: 9rem */
+  .app-main {
+    margin-left: 9rem;
+    min-width: 0;
+    padding: 4rem clamp(2rem, 4.5vw, 6rem) 6rem;
+    animation: fadeUp 0.35s ease both;
+  }
+
+  /* ─────────────────────────────────────────────────
+     TYPOGRAPHY — Re Loop scale
+  ───────────────────────────────────────────────── */
+
+  /* Re Loop h2.exl.en — ~4.8rem @200 (at 10px root = 48px; scaled for 16px root) */
+  .page-title {
+    font-family: "Albert Sans", sans-serif;
+    font-size: clamp(2.8rem, 6vw, 5.2rem);
+    font-weight: 200;
+    line-height: 1.0;
+    letter-spacing: -0.02em;
+    color: var(--ink);
+  }
+
+  .section-title {
+    font-size: 1.4rem;
+    font-weight: 200;
+    line-height: 1.25;
+    color: var(--ink);
+  }
+
+  .eyebrow {
+    font-family: "Albert Sans", sans-serif;
+    font-size: 0.68rem;
+    font-weight: 500;
+    text-transform: uppercase;
+    letter-spacing: 0.16em;
+    color: var(--ink-soft);
+  }
+
+  /* Re Loop's "01", "02" section numbers */
+  .section-num {
+    font-family: "Albert Sans", sans-serif;
+    font-size: 1rem;
+    font-weight: 200;
+    color: var(--ink-soft);
+    letter-spacing: 0.05em;
+  }
+
+  /* ─────────────────────────────────────────────────
+     NOTEBOOK ROW LIST — Re Loop's .information style
+  ───────────────────────────────────────────────── */
+
+  .nb-list {
+    border-top: 1px solid var(--ink-rule);
+  }
+
+  .nb-row {
+    border-bottom: 1px solid var(--ink-rule);
+  }
+
+  .nb-row-link {
+    display: flex;
+    align-items: center;
+    gap: 2.4rem;
+    padding: 2rem 0;
+    width: 100%;
+    color: var(--ink);
+    text-decoration: none;
+    transition: opacity 0.18s ease;
+  }
+
+  .nb-row-link:hover { opacity: 0.65; }
+
+  .nb-row-num {
+    font-family: "Albert Sans", sans-serif;
+    font-size: 1rem;
+    font-weight: 200;
+    color: var(--ink-soft);
+    min-width: 2.8rem;
+    flex-shrink: 0;
+  }
+
+  .nb-row-date {
+    font-family: "Albert Sans", sans-serif;
+    font-size: 0.78rem;
+    color: var(--ink-soft);
+    min-width: 7rem;
+    flex-shrink: 0;
+    letter-spacing: 0.04em;
+  }
+
+  .nb-row-title {
+    flex: 1;
+    font-size: 1rem;
+    font-weight: 400;
+    min-width: 0;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .nb-row-arrow {
+    font-family: "Albert Sans", sans-serif;
+    font-size: 0.9rem;
+    color: var(--ink-soft);
+    flex-shrink: 0;
+    transition: transform 0.2s ease;
+  }
+
+  .nb-row-link:hover .nb-row-arrow { transform: translateX(0.35rem); }
+
+  /* ─────────────────────────────────────────────────
+     WORKSPACE PANELS
+  ───────────────────────────────────────────────── */
+
+  .workspace-panel {
+    background: var(--paper);
+    border: 1px solid rgba(79, 84, 90, 0.14);
+    border-radius: 0.5rem;
+    padding: clamp(1.5rem, 3vw, 2.4rem);
+    box-shadow:
+      0 1px 3px rgba(79, 84, 90, 0.06),
+      0 8px 36px rgba(79, 84, 90, 0.08);
+  }
+
+  .workspace-panel-flush { padding: 0; overflow: hidden; }
+
+  .workspace-panel-header {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+    margin-bottom: 1.4rem;
+    padding-bottom: 1.2rem;
+    border-bottom: 1px solid var(--ink-rule);
+  }
+
+  @media (min-width: 640px) {
+    .workspace-panel-header {
+      flex-direction: row;
+      align-items: center;
+      justify-content: space-between;
+    }
+  }
+
+  .workspace-tab {
+    display: flex;
+    min-width: 7rem;
+    flex-direction: column;
+    text-align: left;
+    font-size: 0.82rem;
+    font-weight: 400;
+    color: var(--ink-soft);
+    padding: 0.8rem 1rem;
+    border: none;
+    border-bottom: 2px solid transparent;
+    border-radius: 0;
+    background: transparent;
+    cursor: pointer;
+    transition: color 0.18s ease, border-color 0.18s ease;
+  }
+
+  .workspace-tab small {
+    margin-top: 0.15rem;
+    font-size: 0.68rem;
+    font-weight: 300;
+    color: rgba(79, 84, 90, 0.42);
+    display: none;
+  }
+
+  @media (min-width: 640px) { .workspace-tab small { display: block; } }
+
+  .workspace-tab:hover { color: var(--ink); }
+  .workspace-tab-active { color: var(--ink); border-bottom-color: var(--ink); }
+
+  .metric-tile {
+    border: 1px solid rgba(79, 84, 90, 0.12);
+    border-radius: 0.4rem;
+    background: var(--paper);
+    padding: 1.2rem 1.4rem;
+  }
+
+  .metric-tile span {
+    display: block;
+    font-size: 0.66rem;
+    font-weight: 500;
+    text-transform: uppercase;
+    letter-spacing: 0.14em;
+    color: var(--ink-soft);
+  }
+
+  .metric-tile strong {
+    display: block;
+    margin-top: 0.75rem;
+    font-family: "Albert Sans", sans-serif;
+    font-size: 3.2rem;
+    font-weight: 200;
+    line-height: 1;
+    color: var(--ink);
+  }
+
+  .quick-action {
+    border: 1px solid rgba(79, 84, 90, 0.1);
+    border-radius: 0.4rem;
+    background: var(--paper);
+    padding: 1.2rem 1.4rem;
+    text-align: left;
+    cursor: pointer;
+    transition: border-color 0.18s ease, box-shadow 0.18s ease, transform 0.15s ease;
+  }
+
+  .quick-action:hover {
+    border-color: rgba(79, 84, 90, 0.24);
+    box-shadow: 0 4px 20px rgba(79, 84, 90, 0.1);
+    transform: translateY(-1px);
+  }
+
+  .quick-action span {
+    display: block;
+    font-size: 0.66rem;
+    font-weight: 500;
+    text-transform: uppercase;
+    letter-spacing: 0.14em;
+    color: var(--ink-soft);
+  }
+
+  .quick-action strong {
+    display: block;
+    margin-top: 0.5rem;
+    font-size: 0.9rem;
+    font-weight: 400;
+    color: var(--ink);
+  }
+
+  .empty-state {
+    border: 1px dashed rgba(79, 84, 90, 0.18);
+    border-radius: 0.4rem;
+    padding: 3rem 1.5rem;
+    text-align: center;
+    font-size: 0.85rem;
+    font-weight: 300;
+    color: var(--ink-soft);
+    letter-spacing: 0.04em;
+  }
+
+  /* ─────────────────────────────────────────────────
+     FORM CONTROLS
+  ───────────────────────────────────────────────── */
+
+  .ui-input {
+    display: block;
+    width: 100%;
+    min-height: 2.8rem;
+    border: 1px solid rgba(79, 84, 90, 0.22);
+    border-radius: 0.4rem;
+    background: var(--paper);
+    color: var(--ink);
+    padding: 0.65rem 0.9rem;
+    font-size: 0.875rem;
+    font-family: inherit;
+    outline: none;
+    transition: border-color 0.18s ease, box-shadow 0.18s ease;
+  }
+
+  .ui-input::placeholder { color: rgba(79, 84, 90, 0.36); }
+
+  .ui-input:focus {
+    border-color: var(--ink-soft);
+    box-shadow: 0 0 0 3px rgba(115, 123, 132, 0.12);
+  }
+
+  .ui-input:disabled { opacity: 0.45; cursor: not-allowed; }
+
+  /* Pill buttons — Re Loop's CTA style */
+  .ui-button {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.4rem;
+    min-height: 2.6rem;
+    border: 1px solid rgba(79, 84, 90, 0.28);
+    border-radius: 999px;
+    padding: 0.6rem 1.4rem;
+    font-size: 0.82rem;
+    font-family: inherit;
+    font-weight: 400;
+    letter-spacing: 0.03em;
+    color: var(--ink);
+    background: var(--paper);
+    cursor: pointer;
+    transition: background 0.18s ease, border-color 0.18s ease, color 0.18s ease;
+  }
+
+  .ui-button:disabled { opacity: 0.38; cursor: not-allowed; }
+
+  .ui-button-primary {
+    background: var(--rail-bg);
+    border-color: var(--rail-bg);
+    color: #ffffff;
+  }
+
+  .ui-button-primary:hover:not(:disabled) {
+    background: var(--rail-hover);
+    border-color: var(--rail-hover);
+  }
+
+  .ui-button-secondary:hover:not(:disabled) {
+    background: rgba(79, 84, 90, 0.06);
+  }
+
+  .ui-button-ghost {
+    border-color: transparent;
+    background: transparent;
+    color: var(--ink-soft);
+    font-size: 0.78rem;
+  }
+
+  .ui-button-ghost:hover:not(:disabled) {
+    background: rgba(79, 84, 90, 0.06);
+    color: var(--ink);
+    border-color: transparent;
+  }
+
+  .ui-button-danger {
+    border-color: rgba(178, 72, 64, 0.3);
+    background: rgba(178, 72, 64, 0.06);
+    color: #B24840;
+  }
+
+  /* ─────────────────────────────────────────────────
+     LOGIN — Re Loop's hero section language
+  ───────────────────────────────────────────────── */
+
+  .login-page {
+    min-height: 100vh;
+    display: grid;
+    grid-template-columns: minmax(0, 1.2fr) minmax(20rem, 0.8fr);
+    gap: clamp(2rem, 5vw, 6rem);
+    align-items: center;
+    padding: clamp(1.5rem, 5vw, 4rem);
+    background: var(--paper);
+  }
+
+  .login-visual {
+    position: relative;
+    min-height: min(52rem, calc(100vh - 6rem));
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-end;
+    border-radius: 0.5rem;
+    background: var(--rail-bg);
+    overflow: hidden;
+    padding: 3.5rem;
+  }
+
+  .login-visual::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(to bottom, rgba(79,84,90,0) 30%, rgba(79,84,90,0.72) 100%);
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  /* The arch — Re Loop's border-radius: 999px 999px 0.5rem 0.5rem */
+  .login-arch {
+    position: absolute;
+    top: 3.5rem;
+    left: 50%;
+    transform: translateX(-50%);
+    width: min(15rem, 55%);
+    aspect-ratio: 3 / 4.2;
+    border: 1px solid rgba(255, 255, 255, 0.18);
+    border-radius: 999px 999px 0.5rem 0.5rem;
+  }
+
+  .login-display {
+    position: relative;
+    z-index: 1;
+  }
+
+  .login-display-label {
+    font-family: "Albert Sans", sans-serif;
+    font-size: 0.66rem;
+    font-weight: 500;
+    text-transform: uppercase;
+    letter-spacing: 0.2em;
+    color: rgba(255, 255, 255, 0.4);
+    margin-bottom: 1.4rem;
+  }
+
+  /* Re Loop .exl.en at full display scale */
+  .login-display-text {
+    font-family: "Albert Sans", sans-serif;
+    font-size: clamp(3rem, 6vw, 6rem);
+    font-weight: 200;
+    line-height: 0.92;
+    letter-spacing: -0.04em;
+    color: #ffffff;
+  }
+
+  .login-display-sub {
+    display: block;
+    margin-top: 0.3em;
+    color: rgba(255, 255, 255, 0.45);
+    font-weight: 200;
+  }
+
+  .login-panel {
+    width: min(100%, 26rem);
+    justify-self: center;
+    background: var(--paper);
+    border: 1px solid rgba(79, 84, 90, 0.14);
+    border-radius: 0.5rem;
+    padding: clamp(1.5rem, 4vw, 2.8rem);
+    box-shadow:
+      0 2px 8px rgba(79, 84, 90, 0.06),
+      0 20px 60px rgba(79, 84, 90, 0.1);
+  }
+
+  .login-panel h1 {
+    margin: 0.3rem 0 2rem;
+    font-family: "Albert Sans", sans-serif;
+    font-size: 2.2rem;
+    font-weight: 200;
+    line-height: 1.05;
+    letter-spacing: -0.02em;
+    text-align: center;
+    color: var(--ink);
+  }
+
+  /* ─────────────────────────────────────────────────
+     ANIMATIONS
+  ───────────────────────────────────────────────── */
+
+  @keyframes fadeUp {
+    from { opacity: 0; transform: translateY(0.6rem); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+
+  /* ─────────────────────────────────────────────────
+     RESPONSIVE — Re Loop's 860px breakpoint
+  ───────────────────────────────────────────────── */
+
+  @media (max-width: 860px) {
+    .shell-rail {
+      top: auto;
+      left: 1rem;
+      right: 1rem;
+      bottom: 1rem;
+      width: auto;
+      min-height: 0;
+      height: 4.8rem;
+      flex-direction: row;
+      border-radius: 0.5rem;
+      box-shadow: 0 8px 32px rgba(79, 84, 90, 0.22);
+    }
+
+    .shell-brand {
+      width: auto;
+      height: 100%;
+      flex-direction: row;
+      padding: 0 1.1rem;
+      border-bottom: none;
+      border-right: 1px solid rgba(255, 255, 255, 0.14);
+    }
+
+    .shell-brand-mark {
+      width: 2.1rem;
+      height: 2.8rem;
+      font-size: 0.6rem;
+    }
+
+    .shell-brand-text,
+    .shell-account span { display: none; }
+
+    .shell-nav {
+      flex: 1;
+      flex-direction: row;
+      justify-content: center;
+      padding: 0.3rem 0;
+    }
+
+    .shell-link {
+      width: auto;
+      padding: 0.55rem 0.9rem;
+      writing-mode: horizontal-tb;
+      letter-spacing: 0.04em;
+    }
+
+    .shell-link::after {
+      top: auto;
+      right: 0.7rem;
+      bottom: 0.2rem;
+      left: 0.7rem;
+      width: auto;
+      height: 2px;
+      transform: scaleX(0.25);
+      transform-origin: right;
+    }
+
+    .shell-link-active::after { transform: scaleX(1); }
+
+    .shell-account {
+      width: auto;
+      padding: 0 0.9rem;
+      border-top: none;
+      border-left: 1px solid rgba(255, 255, 255, 0.14);
+      flex-direction: row;
+    }
+
+    .app-main {
+      margin-left: 0;
+      padding: 1.5rem 1rem 8rem;
+      animation: none;
+    }
+
+    .login-page {
+      grid-template-columns: 1fr;
+      padding: 1rem;
+      gap: 1.5rem;
+    }
+
+    .login-visual {
+      min-height: 18rem;
+      padding: 2rem;
+    }
+
+    .login-arch { width: min(8rem, 42%); }
+
+    .login-display-text { font-size: clamp(2.4rem, 10vw, 3.5rem); }
+
+    .workspace-tab { min-width: 6rem; }
+
+    .nb-row-link { gap: 1.2rem; padding: 1.4rem 0; }
+    .nb-row-date { display: none; }
+  }
+}

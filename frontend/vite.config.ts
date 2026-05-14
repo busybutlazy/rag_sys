@@ -3,6 +3,9 @@ import react from '@vitejs/plugin-react'
 
 export default defineConfig({
   plugins: [react()],
+  optimizeDeps: {
+    include: ['react', 'react-dom', 'react-dom/client', 'react-router-dom'],
+  },
   server: {
     proxy: {
       '/api': { target: 'http://be-server:8001', rewrite: (p) => p.replace(/^\/api/, '') },

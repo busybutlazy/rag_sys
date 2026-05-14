@@ -55,6 +55,7 @@ services:
     build:
       context: ./be-server
       dockerfile: Dockerfile
+      target: runtime
     environment:
       ASPNETCORE_ENVIRONMENT: ${ASPNETCORE_ENVIRONMENT:-Development}
       ASPNETCORE_URLS: http://+:8001
@@ -127,6 +128,7 @@ services:
     build:
       context: ./frontend
       dockerfile: Dockerfile
+      target: runtime
       args:
         VITE_BE_API_URL: /api
         VITE_AI_API_URL: /ai

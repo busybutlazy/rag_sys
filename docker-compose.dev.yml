@@ -1,0 +1,52 @@
+# Development overlay — 搭配 base compose 一起使用：
+#   docker compose -f docker-compose.yml -f docker-compose.dev.yml up --build
+#
+# 特性：
+#   - be-server  : dotnet watch (存檔即重新編譯)
+#   - ai-server  : uvicorn --reload
+#   - rag-server : uvicorn --reload
+#   - frontend   : vite dev server (HMR), port → FRONTEND_DEV_PORT (預設 5988)
+
+services:
+
+  be-server:
+    build:
+      target: dev
+    volumes:
+      - ./be-server:/src           # 掛載原始碼，dotnet watch 監聽變更
+    ports:
+      - "8001:8001"                 # 直接暴露 API 方便除錯
+
+  ai-server:
+    volumes:
+      - ./ai-server/app:/app/app   # 只掛 app/ 目錄，套件由 image 層提供
+    command: >
+      uvicorn app.main:app
+      --host 0.0.0.0
+      --port 8002
+      --reload
+    ports:
+      - "8002:8002"
+
+  rag-server:
+    volumes:
+      - ./rag-server/app:/app/app
+    command: >
+      uvicorn app.main:app
+      --host 0.0.0.0
+      --port 8003
+      --reload
+    ports:
+      - "8003:8003"
+
+  frontend:
+    build:
+      target: dev
+      args:                         # dev 階段不需要 build args，但保留以免報錯
+        VITE_BE_API_URL: /api
+        VITE_AI_API_URL: /ai
+    volumes:
+      - ./frontend:/app             # 掛載整個 frontend 目錄（Vite HMR 需要）
+      - /app/node_modules           # 保留 image 內已安裝的 node_modules
+    ports:
+      - "${FRONTEND_DEV_PORT:-5988}:5173"   # Vite dev server port

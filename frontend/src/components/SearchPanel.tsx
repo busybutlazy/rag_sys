@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import type { FormEvent } from 'react'
 import { apiGet } from '../lib/api'
 
 interface ChunkResult {
@@ -25,20 +26,20 @@ interface Props {
 }
 
 function ResultList({ chunks, label }: { chunks: ChunkResult[]; label?: string }) {
-  if (chunks.length === 0) return <p className="text-xs text-gray-400">No results.</p>
+  if (chunks.length === 0) return <p className="text-xs text-stone-400">No results.</p>
   return (
     <div>
-      {label && <p className="text-xs font-semibold text-gray-500 mb-1 uppercase tracking-wide">{label}</p>}
+      {label && <p className="mb-2 text-xs font-semibold uppercase tracking-[0.12em] text-stone-400">{label}</p>}
       <ul className="space-y-2">
         {chunks.map((r, i) => (
-          <li key={i} className="border rounded-lg p-3 bg-gray-50">
+          <li key={i} className="rounded-lg border border-stone-200 bg-stone-50 p-3">
             <div className="flex items-center justify-between mb-1">
-              <span className="font-mono text-xs text-gray-400">
-                {r.source_id.slice(0, 8)}… · chunk {r.chunk_index}
+              <span className="font-mono text-xs text-stone-400">
+                {r.source_id.slice(0, 8)}... / chunk {r.chunk_index}
               </span>
-              <span className="text-xs text-gray-400">#{i + 1}</span>
+              <span className="text-xs text-stone-400">#{i + 1}</span>
             </div>
-            <p className="text-xs text-gray-800 leading-relaxed line-clamp-4">{r.text}</p>
+            <p className="line-clamp-4 text-xs leading-relaxed text-stone-800">{r.text}</p>
           </li>
         ))}
       </ul>
@@ -54,7 +55,7 @@ export default function SearchPanel({ notebookId }: Props) {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
-  async function search(e: React.FormEvent) {
+  async function search(e: FormEvent) {
     e.preventDefault()
     const q = query.trim()
     if (!q) return
@@ -85,17 +86,17 @@ export default function SearchPanel({ notebookId }: Props) {
 
   return (
     <div className="space-y-3">
-      <form onSubmit={search} className="flex gap-2">
+      <form onSubmit={search} className="grid gap-2 lg:grid-cols-[minmax(0,1fr)_10rem_auto]">
         <input
           value={query}
           onChange={e => setQuery(e.target.value)}
-          placeholder="Search chunks…"
-          className="flex-1 border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+          placeholder="Search chunks"
+          className="ui-input"
         />
         <select
           value={mode}
           onChange={e => setMode(e.target.value as SearchMode)}
-          className="border rounded-lg px-2 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+          className="ui-input"
         >
           <option value="hybrid">Hybrid</option>
           <option value="vector">Vector</option>
@@ -105,9 +106,9 @@ export default function SearchPanel({ notebookId }: Props) {
         <button
           type="submit"
           disabled={!query.trim() || loading}
-          className="px-3 py-2 bg-blue-600 text-white rounded-lg text-sm hover:bg-blue-700 disabled:opacity-40"
+          className="ui-button ui-button-primary"
         >
-          {loading ? '…' : 'Search'}
+          {loading ? '...' : 'Search'}
         </button>
       </form>
 

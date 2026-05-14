@@ -78,6 +78,9 @@ builder.Services.AddControllers();
 builder.Services.AddHttpClient<RagClient>(client =>
     client.BaseAddress = new Uri(
         builder.Configuration["RAG_SERVER_URL"] ?? "http://rag-server:8003"));
+builder.Services.AddHttpClient("ai-server", client =>
+    client.BaseAddress = new Uri(
+        builder.Configuration["AI_SERVER_URL"] ?? "http://ai-server:8002"));
 
 builder.Services.AddCors(options =>
     options.AddPolicy("frontend", policy =>

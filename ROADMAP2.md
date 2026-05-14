@@ -1,0 +1,342 @@
+# RAG System - Hardening Roadmap
+
+This roadmap follows the current project phases in `ROADMAP.md` and focuses on the first round of production hardening after the initial feature build.
+
+Primary review lenses:
+
+1. Maintainability
+2. Security
+3. Extensibility
+
+## Guiding Principles
+
+- Keep BE server as the ownership and authorization boundary.
+- Keep AI/RAG services internal and replaceable.
+- Prefer explicit jobs, contracts, and allowlists over hidden background work and client-provided values.
+- Add focused tests around multi-user isolation, auth, upload safety, and RAG behavior before broad refactors.
+
+---
+
+## Priority Order
+
+| Priority | Phase | Theme | Why first |
+|----------|-------|-------|-----------|
+| P0 | Phase 8 | Auth/session correctness | Current refresh flow is intentionally stubbed but frontend depends on it. |
+| P0 | Phase 9 | Ingestion reliability | Fire-and-forget ingestion can silently lose work. |
+| P0 | Phase 10 | Upload and retrieval security | File parsing and RAG access are high-risk surfaces. |
+| P1 | Phase 11 | Test and quality gates | Needed before larger refactors and provider swaps. |
+| P1 | Phase 12 | API contracts and maintainability | Reduces controller/service coupling and duplicated checks. |
+| P2 | Phase 13 | Extensibility and operations | Makes model/RAG/provider changes safer later. |
+
+---
+
+## Phase 8 - Auth and Session Hardening
+
+**Goal:** Make login/session behavior explicit, correct, and secure.
+
+- [ ] Decide one short-term auth strategy:
+  - [ ] Option A: implement refresh tokens fully.
+  - [ ] Option B: remove frontend refresh behavior and document short-lived in-memory sessions.
+- [ ] If implementing refresh tokens:
+  - [ ] Add `refresh_tokens` table with hashed token, user id, expiry, revoked timestamp, created metadata.
+  - [ ] Implement refresh token rotation on every `/api/auth/refresh`.
+  - [ ] Revoke refresh token on logout.
+  - [ ] Detect token reuse and revoke the user's active refresh token family.
+  - [ ] Keep refresh cookie `HttpOnly`, `SameSite=Strict`, `Secure=true` outside development.
+- [ ] Add startup guards that reject default production secrets:
+  - [ ] `JWT_SECRET`
+  - [ ] `INTERNAL_SECRET`
+  - [ ] `ADMIN_PASSWORD`
+  - [ ] database passwords when production environment is enabled
+- [ ] Add auth tests:
+  - [ ] successful login
+  - [ ] invalid login
+  - [ ] expired access token
+  - [ ] refresh rotation or no-refresh frontend behavior
+  - [ ] logout behavior
+
+**Deliverable:** User session behavior matches implementation. No frontend calls an endpoint that is intentionally unimplemented.
+
+**Review references:**
+- `frontend/src/contexts/AuthContext.tsx`
+- `be-server/BeServer/Auth/AuthController.cs`
+
+---
+
+## Phase 9 - Reliable Ingestion Jobs
+
+**Goal:** Replace fire-and-forget ingestion with durable, observable jobs.
+
+- [ ] Add an `ingestion_jobs` SQL table:
+  - [ ] id
+  - [ ] source_id
+  - [ ] notebook_id
+  - [ ] user_id
+  - [ ] status: `queued`, `running`, `succeeded`, `failed`, `retrying`, `cancelled`
+  - [ ] attempt count
+  - [ ] max attempts
+  - [ ] last error
+  - [ ] timestamps
+- [ ] Update source upload flow:
+  - [ ] Save source record.
+  - [ ] Write file.
+  - [ ] Create ingestion job.
+  - [ ] Return source and job status to frontend.
+- [ ] Add a BE background worker or dedicated worker service:
+  - [ ] Picks queued jobs.
+  - [ ] Calls RAG `/ingest`.
+  - [ ] Retries transient failures with backoff.
+  - [ ] Updates `sources.status` from job result.
+  - [ ] Handles graceful shutdown.
+- [ ] Add job visibility:
+  - [ ] `GET /api/notebooks/{id}/sources` includes current ingestion status.
+  - [ ] Optional endpoint for source/job details.
+  - [ ] Frontend displays queued/running/error states.
+- [ ] Add cleanup behavior:
+  - [ ] If file write fails after DB insert, mark source/job failed or remove record in a transaction-safe way.
+  - [ ] If RAG delete fails, record cleanup debt instead of only logging to stderr.
+
+**Deliverable:** Upload ingestion survives normal service lifecycle events and has inspectable status.
+
+**Review references:**
+- `be-server/BeServer/Content/SourcesController.cs`
+- `rag-server/app/main.py`
+
+---
+
+## Phase 10 - Upload, Parser, and Internal API Security
+
+**Goal:** Harden file and internal-service attack surfaces.
+
+- [ ] Replace client-provided MIME trust with server-side validation:
+  - [ ] Check file signature/magic bytes for PDF, DOCX, JSON/text-like files.
+  - [ ] Cross-check extension, content type, and detected type.
+  - [ ] Store detected MIME separately from original content type.
+- [ ] Add parser limits:
+  - [ ] Max PDF pages.
+  - [ ] Max extracted characters.
+  - [ ] Max JSON size/depth.
+  - [ ] Max DOCX paragraphs/text length.
+  - [ ] Parser timeout or worker cancellation.
+- [ ] Add upload limits:
+  - [ ] Enforce per-user total storage quota.
+  - [ ] Enforce per-notebook source count limit.
+  - [ ] Reject empty files.
+- [ ] Protect internal APIs beyond a single raw shared secret:
+  - [ ] Enforce minimum `INTERNAL_SECRET` length in all services.
+  - [ ] Use different internal secrets per caller where practical.
+  - [ ] Add rotation plan.
+  - [ ] Consider service JWT or mTLS before multi-host deployment.
+- [ ] Add Nginx response headers:
+  - [ ] `X-Content-Type-Options: nosniff`
+  - [ ] `Referrer-Policy`
+  - [ ] minimal `Content-Security-Policy`
+- [ ] Add security tests:
+  - [ ] spoofed MIME type upload
+  - [ ] unsupported file upload
+  - [ ] oversized upload
+  - [ ] missing/invalid internal secret
+  - [ ] path traversal filename cases
+
+**Deliverable:** Upload and internal endpoints fail closed with clear limits.
+
+**Review references:**
+- `be-server/BeServer/Content/SourcesController.cs`
+- `rag-server/app/chunker.py`
+- `rag-server/app/main.py`
+- `frontend/nginx.conf`
+
+---
+
+## Phase 11 - Test Suite and CI Quality Gates
+
+**Goal:** Establish the minimum test and verification foundation before larger refactors.
+
+- [ ] Add BE test project:
+  - [ ] Auth controller tests.
+  - [ ] Notebook ownership tests.
+  - [ ] Search validation tests.
+  - [ ] Source upload validation tests.
+- [ ] Add Python tests:
+  - [ ] chunking behavior
+  - [ ] vector_store query construction behavior where practical
+  - [ ] internal secret checks
+  - [ ] RAG request model validation
+- [ ] Add frontend tests or smoke checks:
+  - [ ] login page render
+  - [ ] protected route redirect
+  - [ ] API error display behavior
+- [ ] Add linters/formatters:
+  - [ ] .NET format/analyzers
+  - [ ] Python `ruff`
+  - [ ] TypeScript/React ESLint
+- [ ] Add CI pipeline:
+  - [ ] frontend typecheck/build
+  - [ ] BE build/test
+  - [ ] Python lint/test
+  - [ ] Docker compose smoke test when secrets are available
+
+**Deliverable:** Every PR can be validated with repeatable local commands and CI checks.
+
+---
+
+## Phase 12 - API Contracts and Maintainability Refactor
+
+**Goal:** Reduce duplicated controller logic and make service contracts explicit.
+
+- [ ] Extract BE user/notebook ownership helpers:
+  - [ ] Current user id accessor.
+  - [ ] Notebook ownership check.
+  - [ ] Session ownership check.
+  - [ ] Source ownership check.
+- [ ] Split `ChatSessionsController` responsibilities:
+  - [ ] Session CRUD.
+  - [ ] Message persistence.
+  - [ ] AI streaming proxy.
+  - [ ] Session state projection.
+  - [ ] Request logging.
+- [ ] Introduce typed RAG client DTOs:
+  - [ ] Avoid returning raw JSON strings from `RagClient`.
+  - [ ] Keep validation at BE boundary before proxying.
+- [ ] Centralize status constants:
+  - [ ] source statuses
+  - [ ] ingestion job statuses
+  - [ ] chat request statuses
+  - [ ] task statuses
+- [ ] Normalize API error envelopes:
+  - [ ] consistent `error.code`
+  - [ ] consistent `error.message`
+  - [ ] request/correlation id
+- [ ] Improve logs:
+  - [ ] Add correlation id across BE, AI, and RAG calls.
+  - [ ] Redact request logs that may contain prompts, uploaded text, or secrets.
+  - [ ] Add retention policy for request logs.
+
+**Deliverable:** Controllers become thin orchestration layers with explicit DTOs and reusable ownership checks.
+
+**Review references:**
+- `be-server/BeServer/Content/ChatSessionsController.cs`
+- `be-server/BeServer/Services/RagClient.cs`
+- `be-server/BeServer/Content/SearchController.cs`
+
+---
+
+## Phase 13 - Extensibility: Models, RAG Config, and Providers
+
+**Goal:** Make model and retrieval changes configurable, testable, and reversible.
+
+- [ ] Add server-side model registry:
+  - [ ] `chat_default`
+  - [ ] `agent_default`
+  - [ ] `summary_default`
+  - [ ] allowed model list per environment
+  - [ ] max output/token/cost controls
+- [ ] Stop accepting arbitrary model names from frontend:
+  - [ ] Frontend sends a preset or mode.
+  - [ ] BE resolves preset to configured model.
+  - [ ] AI server validates model against allowlist.
+- [ ] Complete LLM gateway abstraction:
+  - [ ] Streaming chat completion.
+  - [ ] non-streaming structured output.
+  - [ ] embeddings or separate embedding gateway.
+  - [ ] provider-specific error normalization.
+- [ ] Make RAG config explicit:
+  - [ ] chunk size
+  - [ ] overlap
+  - [ ] embedding model
+  - [ ] embedding dimensions
+  - [ ] search mode
+  - [ ] top_k
+  - [ ] hybrid alpha
+- [ ] Store RAG config snapshot:
+  - [ ] on source ingestion
+  - [ ] on experiment run
+  - [ ] on chat request context snapshot
+- [ ] Add migration path for future retrieval versions:
+  - [ ] re-ingest by source
+  - [ ] re-embed by notebook
+  - [ ] compare retrieval versions in experiments
+
+**Deliverable:** Model/RAG changes are made through config and versioned metadata, not scattered code edits.
+
+**Review references:**
+- `ai-server/app/gateway/openai_provider.py`
+- `ai-server/app/main.py`
+- `ai-server/app/agent.py`
+- `rag-server/app/embedder.py`
+- `rag-server/app/chunker.py`
+
+---
+
+## Phase 14 - Multi-User and Data Isolation Hardening
+
+**Goal:** Prove that multi-user data boundaries hold across SQL, ArangoDB, files, and agent tools.
+
+- [ ] Add isolation tests for every user-scoped API:
+  - [ ] notebooks
+  - [ ] sources
+  - [ ] notes
+  - [ ] search
+  - [ ] chat sessions
+  - [ ] agent tools
+  - [ ] experiments
+- [ ] Ensure RAG chunks carry enough ownership metadata:
+  - [ ] source_id
+  - [ ] notebook_id
+  - [ ] user_id where practical
+- [ ] Add ArangoDB cleanup checks:
+  - [ ] deleting source removes chunks
+  - [ ] deleting notebook removes all related vector records
+  - [ ] deleting user removes all related vector records
+- [ ] Validate agent tool calls:
+  - [ ] tool calls must use active notebook unless explicitly allowed
+  - [ ] BE remains final authorization layer
+  - [ ] no direct user-provided notebook id bypass
+
+**Deliverable:** Cross-user access attempts are covered by automated tests and fail consistently.
+
+---
+
+## Phase 15 - Deployment and Runtime Operations
+
+**Goal:** Prepare the system for a real deployment environment.
+
+- [ ] Add production compose or deployment profile:
+  - [ ] no default development secrets
+  - [ ] production `ASPNETCORE_ENVIRONMENT`
+  - [ ] persistent volume backup guidance
+  - [ ] no direct database exposure
+- [ ] Add backup/restore runbooks:
+  - [ ] MySQL
+  - [ ] ArangoDB
+  - [ ] uploaded files volume
+- [ ] Add health/readiness split:
+  - [ ] liveness endpoint
+  - [ ] readiness endpoint that checks dependencies
+- [ ] Add basic metrics:
+  - [ ] request count/latency/error rate
+  - [ ] ingestion queue depth
+  - [ ] ingestion duration
+  - [ ] LLM request latency/errors
+  - [ ] retrieval latency
+- [ ] Add dependency update policy:
+  - [ ] Docker base image update cadence
+  - [ ] Python dependency lock strategy
+  - [ ] npm audit policy
+  - [ ] .NET package audit
+
+**Deliverable:** Operators can deploy, monitor, back up, and recover the system with documented procedures.
+
+---
+
+## Updated Future Backlog
+
+- GraphRAG with ArangoDB graph traversal.
+- vLLM/local model provider behind the LLM gateway.
+- Full user management UI.
+- Organization/team sharing model.
+- Podcast-style audio summary.
+- Document redaction and PII detection.
+- Evaluation dataset builder for RAG experiments.
+- Admin dashboard for ingestion jobs, failed requests, and usage.
+

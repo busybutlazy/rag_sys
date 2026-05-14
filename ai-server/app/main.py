@@ -1,12 +1,15 @@
 import json
 import os
+import time
 from fastapi import Depends, FastAPI, Header
+from fastapi import HTTPException
 from fastapi.responses import StreamingResponse
 from app.auth import get_current_user, _JWT_SECRET
 from app.agent import stream_agent_events
+from app import be_client
 from app.gateway.openai_provider import OpenAIGateway
 from app.json_logging import configure_json_logging
-from app.models import AgentRunRequest, ChatRequest
+from app.models import AgentRunRequest, ChatRequest, SessionStateUpdateRequest
 from app import rag_client
 
 configure_json_logging()
@@ -46,9 +49,30 @@ async def chat_completions(
         user_messages = [m for m in req.messages if m.role == "user"]
         if user_messages:
             query = user_messages[-1].content
+            started = time.perf_counter()
             try:
                 sources = await rag_client.search(query, req.notebook_id)
-            except Exception:
+                await be_client.log_request(
+                    chat_request_id=req.request_id,
+                    session_id=req.session_id,
+                    service="rag-server",
+                    operation="search.hybrid",
+                    method="GET",
+                    request_json={"query": query, "notebook_id": req.notebook_id, "top_k": 5},
+                    response_json={"result_count": len(sources)},
+                    duration_ms=int((time.perf_counter() - started) * 1000),
+                )
+            except Exception as exc:
+                await be_client.log_request(
+                    chat_request_id=req.request_id,
+                    session_id=req.session_id,
+                    service="rag-server",
+                    operation="search.hybrid",
+                    method="GET",
+                    request_json={"query": query, "notebook_id": req.notebook_id, "top_k": 5},
+                    duration_ms=int((time.perf_counter() - started) * 1000),
+                    error=str(exc),
+                )
                 sources = []
 
         if sources:
@@ -73,14 +97,119 @@ async def chat_completions(
             yield f"data: {json.dumps({'sources': source_refs})}\n\n"
 
         try:
+            started = time.perf_counter()
             async for token in _gateway.stream_complete(messages, req.model):
                 yield f"data: {json.dumps({'token': token})}\n\n"
+            await be_client.log_request(
+                chat_request_id=req.request_id,
+                session_id=req.session_id,
+                service="openai",
+                operation="chat.completions.stream",
+                method="POST",
+                request_json={"model": req.model, "message_count": len(messages), "stream": True},
+                response_json={"completed": True},
+                duration_ms=int((time.perf_counter() - started) * 1000),
+            )
         except Exception as exc:
+            await be_client.log_request(
+                chat_request_id=req.request_id,
+                session_id=req.session_id,
+                service="openai",
+                operation="chat.completions.stream",
+                method="POST",
+                request_json={"model": req.model, "message_count": len(messages), "stream": True},
+                duration_ms=int((time.perf_counter() - started) * 1000),
+                error=str(exc),
+            )
             yield f"data: {json.dumps({'error': str(exc)})}\n\n"
         finally:
             yield "data: [DONE]\n\n"
 
     return StreamingResponse(event_stream(), media_type="text/event-stream")
+
+
+@app.post("/session-state/update")
+async def session_state_update(
+    req: SessionStateUpdateRequest,
+    x_internal_secret: str | None = Header(default=None),
+):
+    expected = os.environ.get("INTERNAL_SECRET", "")
+    if not expected or x_internal_secret != expected:
+        raise HTTPException(status_code=401, detail="Invalid internal secret")
+
+    prev = req.prev_session_state or {}
+    fallback = _fallback_session_state(prev, req.user_input, req.assistant_response)
+    if not os.environ.get("OPENAI_API_KEY"):
+        return fallback
+
+    schema = {
+        "name": "SessionState",
+        "schema": {
+            "type": "object",
+            "properties": {
+                "summary": {"type": "string"},
+                "topic_stack": {
+                    "type": "array",
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "id": {"type": "string"},
+                            "title": {"type": "string"},
+                            "summary": {"type": "string"},
+                            "status": {"type": "string", "enum": ["active", "paused", "done", "cancelled"]},
+                            "updated_reason": {"type": "string"},
+                        },
+                        "required": ["id", "title", "summary", "status", "updated_reason"],
+                        "additionalProperties": False,
+                    },
+                },
+            },
+            "required": ["summary", "topic_stack"],
+            "additionalProperties": False,
+        },
+    }
+    prompt = (
+        "Update a persistent chat session state. Preserve useful existing tasks, "
+        "remove trace/tool details, and keep the most current task first.\n\n"
+        f"Previous state:\n{json.dumps(prev, ensure_ascii=False)}\n\n"
+        f"User input:\n{req.user_input}\n\n"
+        f"Assistant response:\n{req.assistant_response[:4000]}"
+    )
+    started = time.perf_counter()
+    try:
+        response = await _gateway._client.chat.completions.create(
+            model="gpt-4o-mini",
+            messages=[
+                {"role": "system", "content": "Return only structured session state JSON."},
+                {"role": "user", "content": prompt},
+            ],
+            response_format={"type": "json_schema", "json_schema": schema},
+        )
+        content = response.choices[0].message.content or "{}"
+        state = json.loads(content)
+        await be_client.log_request(
+            chat_request_id=req.request_id,
+            session_id=req.session_id,
+            service="openai",
+            operation="session-state.update",
+            method="POST",
+            request_json={"model": "gpt-4o-mini"},
+            response_json={"completed": True},
+            duration_ms=int((time.perf_counter() - started) * 1000),
+        )
+        return state
+    except Exception as exc:
+        await be_client.log_request(
+            chat_request_id=req.request_id,
+            session_id=req.session_id,
+            service="openai",
+            operation="session-state.update",
+            method="POST",
+            request_json={"model": "gpt-4o-mini"},
+            duration_ms=int((time.perf_counter() - started) * 1000),
+            error=str(exc),
+        )
+        return fallback
 
 
 @app.post("/agent/run")
@@ -99,3 +228,42 @@ async def agent_run(
             yield "data: [DONE]\n\n"
 
     return StreamingResponse(event_stream(), media_type="text/event-stream")
+
+
+def _fallback_session_state(prev: dict, user_input: str, assistant_response: str) -> dict:
+    summary = prev.get("summary") if isinstance(prev.get("summary"), str) else ""
+    if not summary:
+        summary = user_input[:160]
+    existing = prev.get("topic_stack") if isinstance(prev.get("topic_stack"), list) else []
+    tasks: list[dict] = []
+    for item in existing:
+        if not isinstance(item, dict):
+            continue
+        task = {
+            "id": str(item.get("id") or f"task-{abs(hash(user_input))}"),
+            "title": str(item.get("title") or "Conversation")[:120],
+            "summary": str(item.get("summary") or summary)[:500],
+            "status": item.get("status") if item.get("status") in {"active", "paused", "done", "cancelled"} else "paused",
+            "updated_reason": "Preserved from previous state.",
+        }
+        tasks.append(task)
+    if not tasks:
+        tasks.append(
+            {
+                "id": f"task-{abs(hash(user_input))}",
+                "title": user_input[:80] or "Conversation",
+                "summary": (assistant_response or user_input)[:500],
+                "status": "active",
+                "updated_reason": "Created from the latest user turn.",
+            }
+        )
+    active_seen = False
+    for task in tasks:
+        if task["status"] == "active":
+            if not active_seen:
+                active_seen = True
+            else:
+                task["status"] = "paused"
+    if not active_seen:
+        tasks[0]["status"] = "active"
+    return {"summary": summary, "topic_stack": tasks}

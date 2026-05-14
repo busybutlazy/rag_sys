@@ -12,3 +12,12 @@ WORKDIR /app
 COPY --from=build /app/publish .
 EXPOSE 8001
 ENTRYPOINT ["dotnet", "BeServer.dll"]
+
+FROM mcr.microsoft.com/dotnet/sdk:8.0 AS dev
+RUN apt-get update && apt-get install -y curl && rm -rf /var/lib/apt/lists/*
+WORKDIR /src
+COPY BeServer.sln .
+COPY BeServer/BeServer.csproj BeServer/
+RUN dotnet restore
+EXPOSE 8001
+CMD ["dotnet", "watch", "run", "--project", "BeServer/BeServer.csproj", "--urls", "http://+:8001"]
