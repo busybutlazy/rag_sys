@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import type { FormEvent } from 'react'
 import { apiGet, apiPost } from '../lib/api'
 
@@ -54,7 +54,7 @@ export default function ChatPanel({ notebookId, getToken }: Props) {
     setMessagesBySession(prev => ({ ...prev, [sessionId]: updater(prev[sessionId] ?? []) }))
   }
 
-  async function loadSessions() {
+  const loadSessions = useCallback(async () => {
     setLoading(true)
     try {
       const loaded = await apiGet<ApiSession[]>(`/api/notebooks/${notebookId}/chat-sessions`)
@@ -71,16 +71,16 @@ export default function ChatPanel({ notebookId, getToken }: Props) {
     } finally {
       setLoading(false)
     }
-  }
+  }, [notebookId])
 
-  async function loadMessages(sessionId: string) {
+  const loadMessages = useCallback(async (sessionId: string) => {
     try {
       const loaded = await apiGet<ApiMessage[]>(`/api/notebooks/${notebookId}/chat-sessions/${sessionId}/messages`)
       setMessagesBySession(prev => ({ ...prev, [sessionId]: loaded.map(mapMessage) }))
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load messages')
     }
-  }
+  }, [notebookId])
 
   async function addSession() {
     if (streaming) return
@@ -243,13 +243,13 @@ export default function ChatPanel({ notebookId, getToken }: Props) {
 
   useEffect(() => {
     void loadSessions()
-  }, [notebookId])
+  }, [loadSessions])
 
   useEffect(() => {
     if (activeSessionId && messagesBySession[activeSessionId] === undefined) {
       void loadMessages(activeSessionId)
     }
-  }, [activeSessionId, messagesBySession])
+  }, [activeSessionId, loadMessages, messagesBySession])
 
   function formatArgs(args?: Record<string, unknown>) {
     if (!args) return ''

@@ -1,6 +1,6 @@
 import os
 import jwt
-from fastapi import Depends, HTTPException, Header
+from fastapi import HTTPException, Header
 
 
 _JWT_SECRET = os.environ.get("JWT_SECRET", "")

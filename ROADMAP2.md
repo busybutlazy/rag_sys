@@ -199,31 +199,41 @@ Phase 9 was implemented on `phase-9-reliable-ingestion-jobs`. Source uploads now
 
 **Goal:** Establish the minimum test and verification foundation before larger refactors.
 
-- [ ] Add BE test project:
-  - [ ] Auth controller tests.
-  - [ ] Notebook ownership tests.
-  - [ ] Search validation tests.
-  - [ ] Source upload validation tests.
-- [ ] Add Python tests:
-  - [ ] chunking behavior
-  - [ ] vector_store query construction behavior where practical
-  - [ ] internal secret checks
-  - [ ] RAG request model validation
-- [ ] Add frontend tests or smoke checks:
-  - [ ] login page render
-  - [ ] protected route redirect
-  - [ ] API error display behavior
-- [ ] Add linters/formatters:
-  - [ ] .NET format/analyzers
-  - [ ] Python `ruff`
-  - [ ] TypeScript/React ESLint
-- [ ] Add CI pipeline:
-  - [ ] frontend typecheck/build
-  - [ ] BE build/test
-  - [ ] Python lint/test
-  - [ ] Docker compose smoke test when secrets are available
+- [x] Add BE test project:
+  - [x] Auth controller tests.
+  - [x] Notebook ownership tests.
+  - [x] Search validation tests.
+  - [x] Source upload validation tests.
+- [x] Add Python tests:
+  - [x] chunking behavior
+  - [x] vector_store query construction behavior where practical
+  - [x] internal secret checks
+  - [x] RAG request model validation
+- [x] Add frontend tests or smoke checks:
+  - [x] login page render
+  - [x] protected route redirect
+  - [x] API error display behavior
+- [x] Add linters/formatters:
+  - [x] .NET format/analyzers
+  - [x] Python `ruff`
+  - [x] TypeScript/React ESLint
+- [x] Add CI pipeline:
+  - [x] frontend typecheck/build
+  - [x] BE build/test
+  - [x] Python lint/test
+  - [x] Docker compose smoke test when secrets are available
 
 **Deliverable:** Every PR can be validated with repeatable local commands and CI checks.
+
+**Current status (2026-05-15):** Implemented on `phase-11-test-suite-ci-quality-gates`. BE coverage now includes ownership and validation edges, RAG has focused Python unit tests, the frontend has smoke checks plus strict ESLint, and GitHub Actions runs BE, Python, frontend, and optional compose-smoke jobs.
+
+**Verification:**
+- `docker run --rm -v /home/jett/Documents/rag_sys/be-server:/src -w /src mcr.microsoft.com/dotnet/sdk:8.0 dotnet test BeServer.Tests/BeServer.Tests.csproj --logger "console;verbosity=minimal"`
+- `docker run --rm -v /home/jett/Documents/rag_sys/be-server:/src -w /src mcr.microsoft.com/dotnet/sdk:8.0 dotnet format BeServer.sln --verify-no-changes`
+- `docker run --rm -e RAG_INTERNAL_SECRET=... -e OPENAI_API_KEY=dummy -v /home/jett/Documents/rag_sys/rag-server:/app -w /app rag-sys-rag-server python -m unittest discover -s tests`
+- `docker run --rm -v /home/jett/Documents/rag_sys:/repo -w /repo ghcr.io/astral-sh/ruff:latest check rag-server ai-server`
+- frontend lint/smoke/build executed in an ephemeral `node:20-alpine` container
+- `docker compose build be-server ai-server rag-server frontend`
 
 ---
 

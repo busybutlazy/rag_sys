@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import type { FormEvent } from 'react'
 import { apiGet, apiPost } from '../lib/api'
 
@@ -43,15 +43,15 @@ export default function ExperimentPanel({ notebookId }: Props) {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
-  useEffect(() => {
-    loadExperiments()
-  }, [notebookId])
-
-  async function loadExperiments() {
+  const loadExperiments = useCallback(async () => {
     const data = await apiGet<ExperimentRecord[]>(`/api/notebooks/${notebookId}/experiments?limit=10`)
     setExperiments(data)
     setActive(current => current ?? data[0] ?? null)
-  }
+  }, [notebookId])
+
+  useEffect(() => {
+    void loadExperiments()
+  }, [loadExperiments])
 
   async function run(e: FormEvent) {
     e.preventDefault()

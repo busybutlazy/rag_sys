@@ -1,5 +1,4 @@
 import json
-import io
 import os
 
 MAX_PDF_PAGES = int(os.environ.get("PARSER_MAX_PDF_PAGES", "200"))

@@ -47,7 +47,12 @@ public class NotebooksController(AppDbContext db) : ControllerBase
             .Where(n => n.Id == id && n.UserId == UserId && !n.Archived)
             .Select(n => new
             {
-                n.Id, n.Name, n.Description, n.Archived, n.CreatedAt, n.UpdatedAt,
+                n.Id,
+                n.Name,
+                n.Description,
+                n.Archived,
+                n.CreatedAt,
+                n.UpdatedAt,
                 Sources = n.Sources.Select(s => new SourceDto(
                     s.Id,
                     s.Title,
