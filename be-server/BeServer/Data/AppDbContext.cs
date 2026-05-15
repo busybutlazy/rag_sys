@@ -9,6 +9,7 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
     public DbSet<RefreshToken> RefreshTokens { get; set; } = null!;
     public DbSet<Notebook> Notebooks { get; set; } = null!;
     public DbSet<Source> Sources { get; set; } = null!;
+    public DbSet<IngestionJob> IngestionJobs { get; set; } = null!;
     public DbSet<Note> Notes { get; set; } = null!;
     public DbSet<ChatSession> ChatSessions { get; set; } = null!;
     public DbSet<ChatMessage> ChatMessages { get; set; } = null!;
@@ -79,6 +80,28 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             e.HasIndex(s => s.UserId);
             e.HasIndex(s => s.NotebookId);
             e.HasIndex(s => new { s.UserId, s.NotebookId });
+        });
+
+        modelBuilder.Entity<IngestionJob>(e =>
+        {
+            e.HasKey(j => j.Id);
+            e.Property(j => j.Id).HasMaxLength(36);
+            e.Property(j => j.SourceId).HasMaxLength(36).IsRequired();
+            e.Property(j => j.NotebookId).HasMaxLength(36).IsRequired();
+            e.Property(j => j.UserId).HasMaxLength(36).IsRequired();
+            e.Property(j => j.JobType).HasMaxLength(32).IsRequired();
+            e.Property(j => j.Status).HasMaxLength(32).IsRequired();
+            e.Property(j => j.LastError).HasColumnType("text");
+            e.Property(j => j.AvailableAt).HasColumnType("datetime");
+            e.Property(j => j.StartedAt).HasColumnType("datetime");
+            e.Property(j => j.CompletedAt).HasColumnType("datetime");
+            e.Property(j => j.CreatedAt).HasColumnType("datetime");
+            e.Property(j => j.UpdatedAt).HasColumnType("datetime");
+            e.HasOne(j => j.User).WithMany().HasForeignKey(j => j.UserId).OnDelete(DeleteBehavior.Cascade);
+            e.HasOne(j => j.Notebook).WithMany().HasForeignKey(j => j.NotebookId).OnDelete(DeleteBehavior.Cascade);
+            e.HasIndex(j => j.SourceId);
+            e.HasIndex(j => new { j.Status, j.JobType, j.AvailableAt });
+            e.HasIndex(j => new { j.UserId, j.NotebookId });
         });
 
         modelBuilder.Entity<Note>(e =>
