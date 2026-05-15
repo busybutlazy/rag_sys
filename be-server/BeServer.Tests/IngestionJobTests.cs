@@ -206,6 +206,96 @@ public class IngestionJobTests
         Assert.NotNull(job.LastError);
     }
 
+    [Fact]
+    public async Task Reingest_CreatesNewQueuedJob_AndCancelsActive()
+    {
+        await using var db = CreateDb();
+        var user = await SeedUser(db);
+        var notebook = await SeedNotebook(db, user.Id);
+        var uploadDir = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString());
+        Directory.CreateDirectory(uploadDir);
+
+        try
+        {
+            var filePath = Path.Combine(uploadDir, "doc.txt");
+            await File.WriteAllTextAsync(filePath, "test content");
+
+            var source = new Source
+            {
+                UserId = user.Id,
+                NotebookId = notebook.Id,
+                Title = "doc.txt",
+                FilePath = filePath,
+                MimeType = "text/plain",
+                Status = IngestionJobStatuses.Queued,
+            };
+            db.Sources.Add(source);
+            var activeJob = new IngestionJob
+            {
+                SourceId = source.Id,
+                NotebookId = notebook.Id,
+                UserId = user.Id,
+                JobType = IngestionJobTypes.Ingest,
+                Status = IngestionJobStatuses.Running,
+                AvailableAt = DateTime.UtcNow,
+            };
+            db.IngestionJobs.Add(activeJob);
+            await db.SaveChangesAsync();
+
+            var controller = CreateSourcesController(db, user.Id, uploadDir, new FakeHandler());
+            var result = await controller.Reingest(notebook.Id, source.Id);
+
+            Assert.IsType<AcceptedResult>(result);
+
+            await db.Entry(activeJob).ReloadAsync();
+            Assert.Equal(IngestionJobStatuses.Cancelled, activeJob.Status);
+
+            var newJob = await db.IngestionJobs.SingleAsync(j => j.Id != activeJob.Id);
+            Assert.Equal(IngestionJobStatuses.Queued, newJob.Status);
+            Assert.Equal(IngestionJobTypes.Ingest, newJob.JobType);
+        }
+        finally
+        {
+            Directory.Delete(uploadDir, recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task Reingest_ReturnsNotFound_WhenSourceBelongsToOtherUser()
+    {
+        await using var db = CreateDb();
+        var owner = await SeedUser(db);
+        var outsider = await SeedUser(db);
+        var notebook = await SeedNotebook(db, owner.Id);
+        var uploadDir = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString());
+        Directory.CreateDirectory(uploadDir);
+
+        try
+        {
+            var filePath = Path.Combine(uploadDir, "doc.txt");
+            await File.WriteAllTextAsync(filePath, "content");
+            var source = new Source
+            {
+                UserId = owner.Id,
+                NotebookId = notebook.Id,
+                Title = "doc.txt",
+                FilePath = filePath,
+                MimeType = "text/plain",
+            };
+            db.Sources.Add(source);
+            await db.SaveChangesAsync();
+
+            var controller = CreateSourcesController(db, outsider.Id, uploadDir, new FakeHandler());
+            var result = await controller.Reingest(notebook.Id, source.Id);
+
+            Assert.IsType<NotFoundObjectResult>(result);
+        }
+        finally
+        {
+            Directory.Delete(uploadDir, recursive: true);
+        }
+    }
+
     private static AppDbContext CreateDb()
     {
         var options = new DbContextOptionsBuilder<AppDbContext>()

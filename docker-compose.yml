@@ -72,6 +72,10 @@ services:
       INTERNAL_SECRET: ${INTERNAL_SECRET}
       RAG_INTERNAL_SECRET: ${RAG_INTERNAL_SECRET:-}
       AI_INTERNAL_SECRET: ${AI_INTERNAL_SECRET:-}
+      Models__ChatDefault: ${MODEL_CHAT_DEFAULT:-gpt-4o-mini}
+      Models__AgentDefault: ${MODEL_AGENT_DEFAULT:-gpt-4o-mini}
+      Models__SummaryDefault: ${MODEL_SUMMARY_DEFAULT:-gpt-4o-mini}
+      Models__Allowed: ${ALLOWED_MODELS:-gpt-4o-mini,gpt-4o}
     networks:
       - rag_net
     volumes:
@@ -96,6 +100,8 @@ services:
       RAG_INTERNAL_SECRET: ${RAG_INTERNAL_SECRET:-}
       AI_INTERNAL_SECRET: ${AI_INTERNAL_SECRET:-}
       RAG_SERVER_URL: http://rag-server:8003
+      ALLOWED_MODELS: ${ALLOWED_MODELS:-gpt-4o-mini,gpt-4o}
+      SUMMARY_MODEL: ${MODEL_SUMMARY_DEFAULT:-gpt-4o-mini}
     networks:
       - rag_net
     healthcheck:
@@ -116,6 +122,13 @@ services:
       OPENAI_API_KEY: ${OPENAI_API_KEY}
       INTERNAL_SECRET: ${INTERNAL_SECRET}
       RAG_INTERNAL_SECRET: ${RAG_INTERNAL_SECRET:-}
+      EMBEDDING_MODEL: ${EMBEDDING_MODEL:-text-embedding-3-small}
+      EMBEDDING_DIMENSIONS: ${EMBEDDING_DIMENSIONS:-1536}
+      RAG_CHUNK_SIZE: ${RAG_CHUNK_SIZE:-800}
+      RAG_CHUNK_OVERLAP: ${RAG_CHUNK_OVERLAP:-100}
+      RAG_SEARCH_MODE: ${RAG_SEARCH_MODE:-hybrid}
+      RAG_TOP_K: ${RAG_TOP_K:-5}
+      RAG_HYBRID_ALPHA: ${RAG_HYBRID_ALPHA:-0.5}
     volumes:
       - uploads:/app/uploads
     networks:

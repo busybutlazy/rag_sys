@@ -20,6 +20,7 @@ public class ChatSessionsController(
     CurrentUserAccessor currentUser,
     OwnershipService ownership,
     ChatMessageService chatMessages,
+    ModelRegistry modelRegistry,
     ILogger<ChatSessionsController> logger) : ControllerBase
 {
     private const int PreviewLength = 150;
@@ -182,7 +183,9 @@ public class ChatSessionsController(
 
         var now = DateTime.UtcNow;
         var mode = NormalizeMode(req.Mode ?? session.Mode);
-        var model = string.IsNullOrWhiteSpace(req.Model) ? "gpt-4o-mini" : req.Model.Trim();
+        var model = modelRegistry.Resolve(
+            req.Model,
+            mode == "agent" ? modelRegistry.AgentDefault : modelRegistry.ChatDefault);
         var nextSequence = (await db.ChatMessages
             .Where(m => m.SessionId == sessionId)
             .MaxAsync(m => (int?)m.Sequence) ?? 0) + 1;

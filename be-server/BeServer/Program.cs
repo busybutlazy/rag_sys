@@ -82,6 +82,7 @@ builder.Services.AddHttpContextAccessor();
 builder.Services.AddScoped<CurrentUserAccessor>();
 builder.Services.AddScoped<OwnershipService>();
 builder.Services.AddScoped<ChatMessageService>();
+builder.Services.AddSingleton<ModelRegistry>();
 builder.Services.AddControllers();
 builder.Services.AddHttpClient<RagClient>(client =>
     client.BaseAddress = new Uri(

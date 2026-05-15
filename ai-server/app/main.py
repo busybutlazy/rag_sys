@@ -32,6 +32,13 @@ app = FastAPI(title="AI Server", version="0.1.0")
 
 _gateway = OpenAIGateway(api_key=os.environ.get("OPENAI_API_KEY", ""))
 
+_ALLOWED_MODELS: set[str] = set(
+    m.strip()
+    for m in os.environ.get("ALLOWED_MODELS", "gpt-4o-mini,gpt-4o").split(",")
+    if m.strip()
+)
+_SUMMARY_MODEL = os.environ.get("SUMMARY_MODEL", "gpt-4o-mini")
+
 _RAG_SYSTEM_PROMPT = (
     "You are a helpful assistant. Answer the user's question based on the provided context. "
     "If the context does not contain relevant information, say so clearly.\n\n"
@@ -50,6 +57,8 @@ async def chat_completions(
     _user_id: str = Depends(get_current_user),
     x_correlation_id: str | None = Header(default=None),
 ):
+    if req.model not in _ALLOWED_MODELS:
+        raise HTTPException(status_code=422, detail=f"Model '{req.model}' is not allowed")
     messages = [m.model_dump() for m in req.messages]
     sources: list[dict] = []
 
@@ -190,23 +199,21 @@ async def session_state_update(
     )
     started = time.perf_counter()
     try:
-        response = await _gateway._client.chat.completions.create(
-            model="gpt-4o-mini",
+        state = await _gateway.complete_structured(
             messages=[
                 {"role": "system", "content": "Return only structured session state JSON."},
                 {"role": "user", "content": prompt},
             ],
-            response_format={"type": "json_schema", "json_schema": schema},
+            schema=schema,
+            model=_SUMMARY_MODEL,
         )
-        content = response.choices[0].message.content or "{}"
-        state = json.loads(content)
         await be_client.log_request(
             chat_request_id=req.request_id,
             session_id=req.session_id,
             service="openai",
             operation="session-state.update",
             method="POST",
-            request_json={"model": "gpt-4o-mini"},
+            request_json={"model": _SUMMARY_MODEL},
             response_json={"completed": True},
             duration_ms=int((time.perf_counter() - started) * 1000),
             correlation_id=x_correlation_id,
@@ -234,6 +241,9 @@ async def agent_run(
     authorization: str | None = Header(default=None),
     x_correlation_id: str | None = Header(default=None),
 ):
+    if req.model not in _ALLOWED_MODELS:
+        raise HTTPException(status_code=422, detail=f"Model '{req.model}' is not allowed")
+
     async def event_stream():
         try:
             async for event in stream_agent_events(req, authorization, x_correlation_id):

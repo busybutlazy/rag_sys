@@ -12,6 +12,7 @@ from app.models import (
     SearchResponse,
     SourceContentResponse,
 )
+from app.rag_config import current_config, validate_config
 from app import chunker, embedder, experiments, vector_store
 
 configure_json_logging()
@@ -20,6 +21,9 @@ _MIN_SECRET_LEN = 32
 _INTERNAL_SECRET = os.environ.get("RAG_INTERNAL_SECRET") or os.environ.get("INTERNAL_SECRET", "")
 if len(_INTERNAL_SECRET) < _MIN_SECRET_LEN:
     raise SystemExit(f"RAG_INTERNAL_SECRET must be at least {_MIN_SECRET_LEN} characters")
+
+_cfg = current_config()
+validate_config(_cfg)
 
 
 def _check_secret(x_internal_secret: str | None) -> None:
@@ -58,7 +62,13 @@ async def ingest(
     db = get_db()
     docs_col = db.collection("documents")
 
-    # Upsert document record as "processing"
+    ingestion_config = {
+        "chunk_size": _cfg.chunk_size,
+        "chunk_overlap": _cfg.chunk_overlap,
+        "embedding_model": _cfg.embedding_model,
+        "embedding_dimensions": _cfg.embedding_dimensions,
+    }
+
     doc_record = {
         "_key": req.source_id,
         "source_id": req.source_id,
@@ -66,6 +76,7 @@ async def ingest(
         "file_path": req.file_path,
         "mime_type": req.mime_type,
         "status": "processing",
+        "ingestion_config": ingestion_config,
     }
     if docs_col.has(req.source_id):
         docs_col.update(doc_record)
@@ -77,17 +88,21 @@ async def ingest(
             asyncio.to_thread(chunker.extract_text, req.file_path, req.mime_type),
             timeout=float(os.environ.get("PARSER_TIMEOUT_SECONDS", "30")),
         )
-        chunks = chunker.chunk_text(text)
+        chunks = chunker.chunk_text(text, _cfg.chunk_size, _cfg.chunk_overlap)
         if not chunks:
             raise ValueError("No text extracted from file")
 
         embeddings = await embedder.embed_batch(chunks)
 
-        # Remove old chunks for this source before inserting new ones
         vector_store.delete_chunks(db, req.source_id)
         vector_store.store_chunks(db, req.source_id, req.notebook_id, chunks, embeddings)
 
-        docs_col.update({"_key": req.source_id, "status": "ready", "chunk_count": len(chunks)})
+        docs_col.update({
+            "_key": req.source_id,
+            "status": "ready",
+            "chunk_count": len(chunks),
+            "ingestion_config": {**ingestion_config, "chunk_count": len(chunks)},
+        })
         return {"source_id": req.source_id, "status": "ready", "chunk_count": len(chunks)}
 
     except Exception as exc:
@@ -99,13 +114,13 @@ async def ingest(
 async def search_vector(
     q: str = Query(..., description="Query text"),
     notebook_id: str = Query(..., description="Notebook to search within"),
-    top_k: int = Query(default=5, ge=1, le=20),
+    top_k: int = Query(default=None, ge=1, le=20),
     x_internal_secret: str | None = Header(default=None),
 ):
     _check_secret(x_internal_secret)
-
+    effective_top_k = top_k if top_k is not None else _cfg.top_k
     query_embedding = await embedder.embed(q)
-    results = vector_store.search_vector(get_db(), query_embedding, notebook_id, top_k)
+    results = vector_store.search_vector(get_db(), query_embedding, notebook_id, effective_top_k)
     return SearchResponse(results=results)
 
 
@@ -113,11 +128,12 @@ async def search_vector(
 async def search_bm25_endpoint(
     q: str = Query(..., description="Query text"),
     notebook_id: str = Query(..., description="Notebook to search within"),
-    top_k: int = Query(default=5, ge=1, le=20),
+    top_k: int = Query(default=None, ge=1, le=20),
     x_internal_secret: str | None = Header(default=None),
 ):
     _check_secret(x_internal_secret)
-    results = vector_store.search_bm25(get_db(), q, notebook_id, top_k)
+    effective_top_k = top_k if top_k is not None else _cfg.top_k
+    results = vector_store.search_bm25(get_db(), q, notebook_id, effective_top_k)
     return SearchResponse(results=results)
 
 
@@ -125,13 +141,15 @@ async def search_bm25_endpoint(
 async def search_hybrid_endpoint(
     q: str = Query(..., description="Query text"),
     notebook_id: str = Query(..., description="Notebook to search within"),
-    top_k: int = Query(default=5, ge=1, le=20),
-    alpha: float = Query(default=0.5, ge=0.0, le=1.0, description="Vector weight (1-alpha goes to BM25)"),
+    top_k: int = Query(default=None, ge=1, le=20),
+    alpha: float = Query(default=None, ge=0.0, le=1.0, description="Vector weight (1-alpha goes to BM25)"),
     x_internal_secret: str | None = Header(default=None),
 ):
     _check_secret(x_internal_secret)
+    effective_top_k = top_k if top_k is not None else _cfg.top_k
+    effective_alpha = alpha if alpha is not None else _cfg.hybrid_alpha
     query_embedding = await embedder.embed(q)
-    results = vector_store.search_hybrid(get_db(), query_embedding, q, notebook_id, top_k, alpha)
+    results = vector_store.search_hybrid(get_db(), query_embedding, q, notebook_id, effective_top_k, effective_alpha)
     return SearchResponse(results=results)
 
 
@@ -139,15 +157,16 @@ async def search_hybrid_endpoint(
 async def search_benchmark(
     q: str = Query(..., description="Query text"),
     notebook_id: str = Query(..., description="Notebook to search within"),
-    top_k: int = Query(default=5, ge=1, le=20),
+    top_k: int = Query(default=None, ge=1, le=20),
     x_internal_secret: str | None = Header(default=None),
 ):
     _check_secret(x_internal_secret)
+    effective_top_k = top_k if top_k is not None else _cfg.top_k
     query_embedding = await embedder.embed(q)
     db = get_db()
-    vec_results = vector_store.search_vector(db, query_embedding, notebook_id, top_k)
-    bm25_results = vector_store.search_bm25(db, q, notebook_id, top_k)
-    hybrid_results = vector_store.search_hybrid(db, query_embedding, q, notebook_id, top_k)
+    vec_results = vector_store.search_vector(db, query_embedding, notebook_id, effective_top_k)
+    bm25_results = vector_store.search_bm25(db, q, notebook_id, effective_top_k)
+    hybrid_results = vector_store.search_hybrid(db, query_embedding, q, notebook_id, effective_top_k)
     return BenchmarkResponse(
         query=q,
         vector=vec_results,
