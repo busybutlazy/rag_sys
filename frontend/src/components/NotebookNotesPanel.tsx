@@ -14,6 +14,7 @@ interface Props {
   onTitleChange: (value: string) => void
   onContentChange: (value: string) => void
   onSubmit: (e: FormEvent) => Promise<void>
+  onDelete: (noteId: string) => Promise<void>
 }
 
 export default function NotebookNotesPanel({
@@ -23,7 +24,14 @@ export default function NotebookNotesPanel({
   onTitleChange,
   onContentChange,
   onSubmit,
+  onDelete,
 }: Props) {
+  function confirmDelete(noteId: string, title?: string) {
+    if (window.confirm(`Delete "${title || 'Untitled'}"? This cannot be undone.`)) {
+      void onDelete(noteId)
+    }
+  }
+
   return (
     <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_20rem]">
       <section className="workspace-panel">
@@ -67,8 +75,19 @@ export default function NotebookNotesPanel({
           <ul className="space-y-2">
             {notes.map(note => (
               <li key={note.id} className="rounded-md border border-stone-200 bg-white px-3 py-2">
-                <p className="truncate text-sm font-medium text-stone-800">{note.title || 'Untitled'}</p>
-                <p className="mt-1 text-xs text-stone-400">{note.noteType}</p>
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <p className="truncate text-sm font-medium text-stone-800">{note.title || 'Untitled'}</p>
+                    <p className="mt-1 text-xs text-stone-400">{note.noteType}</p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => confirmDelete(note.id, note.title)}
+                    className="text-xs text-stone-400 transition hover:text-red-600"
+                  >
+                    Delete
+                  </button>
+                </div>
               </li>
             ))}
           </ul>

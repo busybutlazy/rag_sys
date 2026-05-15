@@ -83,7 +83,7 @@ public class IngestionJobWorker(
             job.Status = IngestionJobStatuses.Succeeded;
             job.CompletedAt = now;
             job.UpdatedAt = now;
-            source.Status = "ingested";
+            source.Status = SourceStatuses.Ingested;
             source.UpdatedAt = now;
             await db.SaveChangesAsync(cancellationToken);
         }

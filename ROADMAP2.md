@@ -243,35 +243,40 @@ Phase 9 was implemented on `phase-9-reliable-ingestion-jobs`. Source uploads now
 
 **Current status (2026-05-14):** Chat session orchestration is functional, but much of the controller logic remains inline in `ChatSessionsController`. This phase is still a refactor/hardening phase, not a feature-completion phase.
 
-- [ ] Extract BE user/notebook ownership helpers:
-  - [ ] Current user id accessor.
-  - [ ] Notebook ownership check.
-  - [ ] Session ownership check.
-  - [ ] Source ownership check.
-- [ ] Split `ChatSessionsController` responsibilities:
-  - [ ] Session CRUD.
-  - [ ] Message persistence.
-  - [ ] AI streaming proxy.
-  - [ ] Session state projection.
-  - [ ] Request logging.
-- [ ] Introduce typed RAG client DTOs:
-  - [ ] Avoid returning raw JSON strings from `RagClient`.
-  - [ ] Keep validation at BE boundary before proxying.
-- [ ] Centralize status constants:
-  - [ ] source statuses
-  - [ ] ingestion job statuses
-  - [ ] chat request statuses
-  - [ ] task statuses
-- [ ] Normalize API error envelopes:
-  - [ ] consistent `error.code`
-  - [ ] consistent `error.message`
-  - [ ] request/correlation id
-- [ ] Improve logs:
-  - [ ] Add correlation id across BE, AI, and RAG calls.
-  - [ ] Redact request logs that may contain prompts, uploaded text, or secrets.
-  - [ ] Add retention policy for request logs.
+- [x] Extract BE user/notebook ownership helpers:
+  - [x] Current user id accessor.
+  - [x] Notebook ownership check.
+  - [x] Session ownership check.
+  - [x] Source ownership check.
+- [x] Split `ChatSessionsController` responsibilities:
+  - [x] Session CRUD.
+  - [x] Message persistence.
+  - [x] AI streaming proxy.
+  - [x] Session state projection.
+  - [x] Request logging.
+- [x] Introduce typed RAG client DTOs:
+  - [x] Avoid returning raw JSON strings from `RagClient`.
+  - [x] Keep validation at BE boundary before proxying.
+- [x] Centralize status constants:
+  - [x] source statuses
+  - [x] ingestion job statuses
+  - [x] chat request statuses
+  - [x] task statuses
+- [x] Normalize API error envelopes:
+  - [x] consistent `error.code`
+  - [x] consistent `error.message`
+  - [x] request/correlation id
+- [x] Improve logs:
+  - [x] Add correlation id across BE, AI, and RAG calls.
+  - [x] Redact request logs that may contain prompts, uploaded text, or secrets.
+  - [x] Add retention policy for request logs.
 
 **Deliverable:** Controllers become thin orchestration layers with explicit DTOs and reusable ownership checks.
+
+**Current status (2026-05-15):** Implemented on `phase-12-api-contracts-maintainability-refactor`. BE now uses shared current-user and ownership services, normalized error envelopes, centralized status constants, typed RAG DTOs, correlation-id middleware, request-log redaction, request-log retention, and a dedicated chat message service that removes message-context/persistence work from `ChatSessionsController`.
+
+**Verification:**
+- `docker run --rm -v /home/jett/Documents/rag_sys/be-server:/src -w /src mcr.microsoft.com/dotnet/sdk:8.0 dotnet test BeServer.Tests/BeServer.Tests.csproj --logger "console;verbosity=minimal"`
 
 **Review references:**
 - `be-server/BeServer/Content/ChatSessionsController.cs`

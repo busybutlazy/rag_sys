@@ -255,7 +255,6 @@ public class IngestionJobTests
                 ["UPLOAD_MAX_FILE_BYTES"] = maxUploadBytes.ToString(),
             })
             .Build();
-        var rag = new RagClient(new HttpClient(handler) { BaseAddress = new Uri("http://rag-server") }, config);
         var context = new DefaultHttpContext
         {
             User = new ClaimsPrincipal(new ClaimsIdentity(
@@ -263,8 +262,12 @@ public class IngestionJobTests
                 new Claim(ClaimTypes.NameIdentifier, userId),
             ], "test")),
         };
+        var httpContextAccessor = new HttpContextAccessor { HttpContext = context };
+        var currentUser = new CurrentUserAccessor(httpContextAccessor);
+        var ownership = new OwnershipService(db, currentUser);
+        var rag = new RagClient(new HttpClient(handler) { BaseAddress = new Uri("http://rag-server") }, config, httpContextAccessor);
 
-        return new SourcesController(db, rag, config)
+        return new SourcesController(db, rag, config, currentUser, ownership)
         {
             ControllerContext = new ControllerContext
             {
@@ -284,7 +287,11 @@ public class IngestionJobTests
             })
             .Build();
         services.AddDbContext<AppDbContext>(options => options.UseInMemoryDatabase(dbName));
-        services.AddScoped(_ => new RagClient(new HttpClient(handler) { BaseAddress = new Uri("http://rag-server") }, config));
+        services.AddHttpContextAccessor();
+        services.AddScoped(_ => new RagClient(
+            new HttpClient(handler) { BaseAddress = new Uri("http://rag-server") },
+            config,
+            new HttpContextAccessor()));
         services.AddSingleton<ILogger<IngestionJobWorker>>(NullLogger<IngestionJobWorker>.Instance);
         services.AddSingleton<IngestionJobWorker>();
         return services.BuildServiceProvider();

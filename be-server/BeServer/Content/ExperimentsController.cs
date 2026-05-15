@@ -1,9 +1,6 @@
-using System.Security.Claims;
-using BeServer.Data;
 using BeServer.Services;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.EntityFrameworkCore;
 using Microsoft.AspNetCore.RateLimiting;
 
 namespace BeServer.Content;
@@ -12,42 +9,35 @@ namespace BeServer.Content;
 [Route("api/notebooks/{notebookId}/experiments")]
 [Authorize]
 [EnableRateLimiting("write")]
-public class ExperimentsController(AppDbContext db, RagClient rag) : ControllerBase
+public class ExperimentsController(OwnershipService ownership, RagClient rag) : ControllerBase
 {
-    private string UserId =>
-        User.FindFirstValue(ClaimTypes.NameIdentifier) ?? User.FindFirstValue("sub") ?? "";
-
     [HttpGet]
     public async Task<IActionResult> List(string notebookId, [FromQuery] int limit = 20)
     {
-        if (!await OwnsNotebook(notebookId)) return NotFound();
-        var json = await rag.ListExperimentsAsync(notebookId, Math.Clamp(limit, 1, 100));
-        return Content(json, "application/json");
+        if (!await ownership.NotebookExistsAsync(notebookId))
+            return ApiErrors.NotFound(this, "notebook.not_found", "Notebook not found");
+        return Ok(await rag.ListExperimentsAsync(notebookId, Math.Clamp(limit, 1, 100)));
     }
 
     [HttpGet("{experimentId}")]
     public async Task<IActionResult> Get(string notebookId, string experimentId)
     {
-        if (!await OwnsNotebook(notebookId)) return NotFound();
-        var json = await rag.GetExperimentAsync(notebookId, experimentId);
-        return Content(json, "application/json");
+        if (!await ownership.NotebookExistsAsync(notebookId))
+            return ApiErrors.NotFound(this, "notebook.not_found", "Notebook not found");
+        return Ok(await rag.GetExperimentAsync(notebookId, experimentId));
     }
 
     [HttpPost]
     public async Task<IActionResult> Run(string notebookId, [FromBody] ExperimentRunRequest req)
     {
-        if (!await OwnsNotebook(notebookId)) return NotFound();
+        if (!await ownership.NotebookExistsAsync(notebookId))
+            return ApiErrors.NotFound(this, "notebook.not_found", "Notebook not found");
         if (req.Queries.Length == 0 || req.Queries.Length > 20)
-            return BadRequest(new { error = "Provide 1 to 20 queries." });
+            return ApiErrors.BadRequest(this, "experiment.invalid_query_count", "Provide 1 to 20 queries.");
         if (req.Queries.Any(q => string.IsNullOrWhiteSpace(q) || q.Length > 500))
-            return BadRequest(new { error = "Queries must be non-empty and at most 500 characters." });
+            return ApiErrors.BadRequest(this, "experiment.invalid_query", "Queries must be non-empty and at most 500 characters.");
 
         var config = req.Config ?? new ExperimentConfig(["vector", "bm25", "hybrid"]);
-        var normalized = req with { Config = config };
-        var json = await rag.RunExperimentAsync(notebookId, normalized);
-        return Content(json, "application/json");
+        return Ok(await rag.RunExperimentAsync(notebookId, req with { Config = config }));
     }
-
-    private Task<bool> OwnsNotebook(string notebookId) =>
-        db.Notebooks.AnyAsync(n => n.Id == notebookId && n.UserId == UserId && !n.Archived);
 }

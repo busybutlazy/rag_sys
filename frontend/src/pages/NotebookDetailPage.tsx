@@ -101,6 +101,17 @@ export default function NotebookDetailPage() {
     }
   }
 
+  async function deleteNote(noteId: string) {
+    try {
+      await apiDelete(`/api/notebooks/${id}/notes/${noteId}`)
+      await reload()
+      setError(null)
+    } catch (err) {
+      console.error('Delete note failed', err)
+      setError('Failed to delete note.')
+    }
+  }
+
   if (!nb) return <div className="text-sm text-stone-400">Loading...</div>
 
   return (
@@ -255,6 +266,7 @@ export default function NotebookDetailPage() {
               onTitleChange={setNoteTitle}
               onContentChange={setNoteContent}
               onSubmit={createNote}
+              onDelete={deleteNote}
             />
           )}
 

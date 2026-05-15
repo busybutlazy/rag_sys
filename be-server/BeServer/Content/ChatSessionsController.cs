@@ -1,9 +1,9 @@
 using System.Diagnostics;
-using System.Security.Claims;
 using System.Text;
 using System.Text.Json;
 using BeServer.Data;
 using BeServer.Data.Entities;
+using BeServer.Services;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -17,27 +17,22 @@ public class ChatSessionsController(
     AppDbContext db,
     IHttpClientFactory httpClientFactory,
     IConfiguration config,
+    CurrentUserAccessor currentUser,
+    OwnershipService ownership,
+    ChatMessageService chatMessages,
     ILogger<ChatSessionsController> logger) : ControllerBase
 {
     private const int PreviewLength = 150;
     private const int MaxLogJsonChars = 20000;
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
 
-    private string UserId
-    {
-        get
-        {
-            var id = User.FindFirstValue(ClaimTypes.NameIdentifier) ?? User.FindFirstValue("sub");
-            if (string.IsNullOrEmpty(id))
-                throw new InvalidOperationException("JWT is missing user identity claim.");
-            return id;
-        }
-    }
+    private string UserId => currentUser.UserId;
 
     [HttpGet]
     public async Task<IActionResult> List(string notebookId)
     {
-        if (!await NotebookExists(notebookId)) return NotFound();
+        if (!await ownership.NotebookExistsAsync(notebookId))
+            return ApiErrors.NotFound(this, "notebook.not_found", "Notebook not found");
 
         var sessions = await db.ChatSessions
             .Where(s => s.UserId == UserId && s.NotebookId == notebookId && !s.Archived)
@@ -61,7 +56,8 @@ public class ChatSessionsController(
     [HttpPost]
     public async Task<IActionResult> Create(string notebookId, [FromBody] CreateChatSessionRequest req)
     {
-        if (!await NotebookExists(notebookId)) return NotFound();
+        if (!await ownership.NotebookExistsAsync(notebookId))
+            return ApiErrors.NotFound(this, "notebook.not_found", "Notebook not found");
 
         var now = DateTime.UtcNow;
         var session = new ChatSession
@@ -90,7 +86,8 @@ public class ChatSessionsController(
     [HttpGet("{sessionId}/messages")]
     public async Task<IActionResult> Messages(string notebookId, string sessionId)
     {
-        if (!await SessionExists(notebookId, sessionId)) return NotFound();
+        if (!await ownership.SessionExistsAsync(notebookId, sessionId))
+            return ApiErrors.NotFound(this, "session.not_found", "Chat session not found");
 
         var rows = await db.ChatMessages
             .Where(m => m.SessionId == sessionId && m.UserId == UserId && m.NotebookId == notebookId)
@@ -128,7 +125,8 @@ public class ChatSessionsController(
     [HttpGet("{sessionId}/tasks")]
     public async Task<IActionResult> Tasks(string notebookId, string sessionId)
     {
-        if (!await SessionExists(notebookId, sessionId)) return NotFound();
+        if (!await ownership.SessionExistsAsync(notebookId, sessionId))
+            return ApiErrors.NotFound(this, "session.not_found", "Chat session not found");
 
         var rows = await db.SessionTasks
             .Where(t => t.SessionId == sessionId)
@@ -189,13 +187,13 @@ public class ChatSessionsController(
             .Where(m => m.SessionId == sessionId)
             .MaxAsync(m => (int?)m.Sequence) ?? 0) + 1;
 
-        var contextMessages = await BuildContextMessages(sessionId, req.Content);
+        var contextMessages = await chatMessages.BuildContextMessagesAsync(sessionId, req.Content, text => Preview(text));
         var requestEntity = new ChatRequest
         {
             SessionId = sessionId,
             Mode = mode,
             Model = model,
-            Status = "running",
+            Status = ChatRequestStatuses.Running,
             ContextSnapshotJson = ToLimitedJson(contextMessages),
             StartedAt = now,
         };
@@ -242,7 +240,7 @@ public class ChatSessionsController(
             Operation = mode == "agent" ? "agent.run" : "chat.completions",
             Method = "POST",
             Url = $"{aiBase}{endpoint}",
-            RequestJson = ToLimitedJson(aiRequestBody),
+            RequestJson = RequestLogSanitizer.Redact(ToLimitedJson(aiRequestBody)),
             CreatedAt = DateTime.UtcNow,
         };
         db.RequestLogs.Add(requestLog);
@@ -260,6 +258,7 @@ public class ChatSessionsController(
             httpReq.Content = new StringContent(JsonSerializer.Serialize(aiRequestBody, JsonOptions), Encoding.UTF8, "application/json");
             if (Request.Headers.Authorization.Count > 0)
                 httpReq.Headers.TryAddWithoutValidation("Authorization", Request.Headers.Authorization.ToString());
+            httpReq.Headers.TryAddWithoutValidation("X-Correlation-Id", HttpContext.TraceIdentifier);
 
             using var aiRes = await client.SendAsync(httpReq, HttpCompletionOption.ResponseHeadersRead, HttpContext.RequestAborted);
             requestLog.StatusCode = (int)aiRes.StatusCode;
@@ -283,21 +282,21 @@ public class ChatSessionsController(
                 if (runError is not null) break;
             }
 
-            requestEntity.Status = runError is null ? "completed" : "failed";
+            requestEntity.Status = runError is null ? ChatRequestStatuses.Completed : ChatRequestStatuses.Failed;
             requestEntity.Error = runError;
-            requestLog.ResponseJson = ToLimitedJson(new
+            requestLog.ResponseJson = RequestLogSanitizer.Redact(ToLimitedJson(new
             {
                 assistant = Preview(assistant.ToString(), 1000),
                 sources,
                 traces = traceEvents,
                 error = runError,
-            });
+            }));
         }
         catch (Exception ex)
         {
             logger.LogWarning(ex, "Chat run failed for request {RequestId}", requestEntity.Id);
             runError = ex.Message;
-            requestEntity.Status = "failed";
+            requestEntity.Status = ChatRequestStatuses.Failed;
             requestEntity.Error = ex.Message;
             requestLog.Error = ex.Message;
             await Response.WriteAsync($"data: {JsonSerializer.Serialize(new { error = ex.Message })}\n\n");
@@ -312,20 +311,17 @@ public class ChatSessionsController(
 
             if (assistant.Length > 0 || runError is null)
             {
-                var assistantMessage = new ChatMessage
-                {
-                    SessionId = sessionId,
-                    UserId = UserId,
-                    NotebookId = notebookId,
-                    Role = "assistant",
-                    Content = assistant.ToString(),
-                    ContentPreview = Preview(assistant.ToString()),
-                    Sequence = nextSequence + 1,
-                    RequestId = requestEntity.Id,
-                    SourcesJson = sources.HasValue ? ToLimitedJson(sources.Value) : null,
-                    TracesJson = traceEvents.Count > 0 ? ToLimitedJson(traceEvents) : null,
-                    CreatedAt = completedAt,
-                };
+                var assistantMessage = chatMessages.CreateAssistantMessage(
+                    sessionId,
+                    UserId,
+                    notebookId,
+                    requestEntity.Id,
+                    nextSequence + 1,
+                    assistant.ToString(),
+                    Preview(assistant.ToString()),
+                    sources.HasValue ? ToLimitedJson(sources.Value) : null,
+                    traceEvents.Count > 0 ? ToLimitedJson(traceEvents) : null,
+                    completedAt);
                 db.ChatMessages.Add(assistantMessage);
                 requestEntity.AssistantMessageId = assistantMessage.Id;
             }
@@ -340,49 +336,6 @@ public class ChatSessionsController(
             await Response.WriteAsync("data: [DONE]\n\n");
             await Response.Body.FlushAsync();
         }
-    }
-
-    private async Task<bool> NotebookExists(string notebookId) =>
-        await db.Notebooks.AnyAsync(n => n.Id == notebookId && n.UserId == UserId && !n.Archived);
-
-    private async Task<bool> SessionExists(string notebookId, string sessionId) =>
-        await db.ChatSessions.AnyAsync(s => s.Id == sessionId && s.UserId == UserId && s.NotebookId == notebookId && !s.Archived);
-
-    private async Task<List<object>> BuildContextMessages(string sessionId, string currentUserInput)
-    {
-        var recent = await db.ChatMessages
-            .Where(m => m.SessionId == sessionId && (m.Role == "user" || m.Role == "assistant"))
-            .OrderByDescending(m => m.Sequence)
-            .Select(m => new { role = m.Role, content = m.ContentPreview })
-            .Take(20)
-            .ToListAsync();
-
-        var selected = new List<object>();
-        var completedTurns = 0;
-        var hasAssistantForTurn = false;
-
-        foreach (var message in recent)
-        {
-            selected.Add(message);
-            if (message.role == "assistant")
-            {
-                hasAssistantForTurn = true;
-            }
-            else if (message.role == "user")
-            {
-                if (hasAssistantForTurn)
-                    completedTurns++;
-                hasAssistantForTurn = false;
-                if (completedTurns >= 5)
-                    break;
-            }
-        }
-
-        selected.Reverse();
-        return selected
-            .Cast<object>()
-            .Append(new { role = "user", content = Preview(currentUserInput) })
-            .ToList();
     }
 
     private async Task UpdateSessionState(ChatSession session, string requestId, string userInput, string assistantResponse)
@@ -408,7 +361,7 @@ public class ChatSessionsController(
             Operation = "session-state.update",
             Method = "POST",
             Url = $"{aiBase}/session-state/update",
-            RequestJson = ToLimitedJson(body),
+            RequestJson = RequestLogSanitizer.Redact(ToLimitedJson(body)),
             CreatedAt = DateTime.UtcNow,
         };
         db.RequestLogs.Add(log);
@@ -423,11 +376,12 @@ public class ChatSessionsController(
                 : config["AI_INTERNAL_SECRET"];
             if (!string.IsNullOrWhiteSpace(secret))
                 httpReq.Headers.Add("X-Internal-Secret", secret);
+            httpReq.Headers.TryAddWithoutValidation("X-Correlation-Id", HttpContext.TraceIdentifier);
 
             using var res = await client.SendAsync(httpReq);
             log.StatusCode = (int)res.StatusCode;
             var json = await res.Content.ReadAsStringAsync();
-            log.ResponseJson = LimitJson(json);
+            log.ResponseJson = RequestLogSanitizer.Redact(LimitJson(json));
             res.EnsureSuccessStatusCode();
 
             using var doc = JsonDocument.Parse(json);

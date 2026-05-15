@@ -2,6 +2,7 @@ using System.Text;
 using BeServer.Auth;
 using BeServer.Data;
 using BeServer.Data.Entities;
+using BeServer.Middleware;
 using BeServer.Services;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.RateLimiting;
@@ -77,6 +78,10 @@ builder.Services.AddRateLimiter(options =>
     });
 });
 builder.Services.AddScoped<JwtService>();
+builder.Services.AddHttpContextAccessor();
+builder.Services.AddScoped<CurrentUserAccessor>();
+builder.Services.AddScoped<OwnershipService>();
+builder.Services.AddScoped<ChatMessageService>();
 builder.Services.AddControllers();
 builder.Services.AddHttpClient<RagClient>(client =>
     client.BaseAddress = new Uri(
@@ -94,6 +99,7 @@ builder.Services.AddCors(options =>
               .AllowCredentials()));
 
 var app = builder.Build();
+app.UseMiddleware<CorrelationIdMiddleware>();
 
 // ── Migrate & Seed ───────────────────────────────
 using (var scope = app.Services.CreateScope())
@@ -102,6 +108,14 @@ using (var scope = app.Services.CreateScope())
     var logger = scope.ServiceProvider.GetRequiredService<ILoggerFactory>()
         .CreateLogger("DatabaseStartup");
     await MigrateAndSeedWithRetry(db, builder.Configuration, logger);
+    await PruneRequestLogs(db, builder.Configuration);
+}
+
+static async Task PruneRequestLogs(AppDbContext db, IConfiguration config)
+{
+    var retentionDays = config.GetValue<int?>("REQUEST_LOG_RETENTION_DAYS") ?? 30;
+    var cutoff = DateTime.UtcNow.AddDays(-retentionDays);
+    await db.RequestLogs.Where(log => log.CreatedAt < cutoff).ExecuteDeleteAsync();
 }
 
 app.UseCors("frontend");

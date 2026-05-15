@@ -32,6 +32,12 @@ export default function NotebookSourcesPanel({ sources, onUpload, onDelete }: Pr
     if (fileRef.current) fileRef.current.value = ''
   }
 
+  function confirmDelete(sourceId: string, title: string) {
+    if (window.confirm(`Delete "${title}"? This will remove the file and its indexed content.`)) {
+      void onDelete(sourceId)
+    }
+  }
+
   return (
     <section className="workspace-panel">
       <div className="workspace-panel-header">
@@ -70,7 +76,7 @@ export default function NotebookSourcesPanel({ sources, onUpload, onDelete }: Pr
               </div>
               <button
                 type="button"
-                onClick={() => onDelete(source.id)}
+                onClick={() => confirmDelete(source.id, source.title)}
                 className="ui-button ui-button-danger shrink-0 text-xs"
               >
                 Delete
