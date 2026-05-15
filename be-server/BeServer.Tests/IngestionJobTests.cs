@@ -45,6 +45,122 @@ public class IngestionJobTests
             Assert.Equal(source.Id, job.SourceId);
             Assert.Equal(IngestionJobStatuses.Queued, job.Status);
             Assert.Equal(IngestionJobStatuses.Queued, source.Status);
+            Assert.Equal("text/plain", source.OriginalContentType);
+            Assert.Equal("text/plain", source.DetectedMimeType);
+        }
+        finally
+        {
+            if (Directory.Exists(uploadDir))
+                Directory.Delete(uploadDir, recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task Upload_RejectsSpoofedMimeType()
+    {
+        await using var db = CreateDb();
+        var user = await SeedUser(db);
+        var notebook = await SeedNotebook(db, user.Id);
+        var controller = CreateSourcesController(db, user.Id, Path.GetTempPath(), new FakeHandler());
+        var file = new FormFile(new MemoryStream("hello"u8.ToArray()), 0, 5, "file", "doc.txt")
+        {
+            Headers = new HeaderDictionary(),
+            ContentType = "application/pdf",
+        };
+
+        var result = await controller.Upload(notebook.Id, file);
+
+        Assert.IsType<BadRequestObjectResult>(result);
+        Assert.Empty(db.Sources);
+    }
+
+    [Fact]
+    public async Task Upload_RejectsUnsupportedExtension()
+    {
+        await using var db = CreateDb();
+        var user = await SeedUser(db);
+        var notebook = await SeedNotebook(db, user.Id);
+        var controller = CreateSourcesController(db, user.Id, Path.GetTempPath(), new FakeHandler());
+        var file = new FormFile(new MemoryStream("hello"u8.ToArray()), 0, 5, "file", "doc.exe")
+        {
+            Headers = new HeaderDictionary(),
+            ContentType = "text/plain",
+        };
+
+        var result = await controller.Upload(notebook.Id, file);
+
+        Assert.IsType<BadRequestObjectResult>(result);
+        Assert.Empty(db.Sources);
+    }
+
+    [Fact]
+    public async Task Upload_RejectsWhenUserQuotaExceeded()
+    {
+        await using var db = CreateDb();
+        var user = await SeedUser(db);
+        var notebook = await SeedNotebook(db, user.Id);
+        db.Sources.Add(new Source
+        {
+            UserId = user.Id,
+            NotebookId = notebook.Id,
+            Title = "existing.txt",
+            FileSizeBytes = 5,
+        });
+        await db.SaveChangesAsync();
+        var controller = CreateSourcesController(db, user.Id, Path.GetTempPath(), new FakeHandler(), quotaBytes: 5);
+        var file = new FormFile(new MemoryStream("hello"u8.ToArray()), 0, 5, "file", "doc.txt")
+        {
+            Headers = new HeaderDictionary(),
+            ContentType = "text/plain",
+        };
+
+        var result = await controller.Upload(notebook.Id, file);
+
+        Assert.IsType<BadRequestObjectResult>(result);
+        Assert.Single(db.Sources);
+    }
+
+    [Fact]
+    public async Task Upload_RejectsOversizedFile()
+    {
+        await using var db = CreateDb();
+        var user = await SeedUser(db);
+        var notebook = await SeedNotebook(db, user.Id);
+        var controller = CreateSourcesController(db, user.Id, Path.GetTempPath(), new FakeHandler(), maxUploadBytes: 4);
+        var file = new FormFile(new MemoryStream("hello"u8.ToArray()), 0, 5, "file", "doc.txt")
+        {
+            Headers = new HeaderDictionary(),
+            ContentType = "text/plain",
+        };
+
+        var result = await controller.Upload(notebook.Id, file);
+
+        Assert.IsType<BadRequestObjectResult>(result);
+        Assert.Empty(db.Sources);
+    }
+
+    [Fact]
+    public async Task Upload_StripsPathTraversalFromStoredPath()
+    {
+        await using var db = CreateDb();
+        var user = await SeedUser(db);
+        var notebook = await SeedNotebook(db, user.Id);
+        var uploadDir = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString());
+        var controller = CreateSourcesController(db, user.Id, uploadDir, new FakeHandler());
+        var file = new FormFile(new MemoryStream("hello"u8.ToArray()), 0, 5, "file", "../doc.txt")
+        {
+            Headers = new HeaderDictionary(),
+            ContentType = "text/plain",
+        };
+
+        try
+        {
+            var result = await controller.Upload(notebook.Id, file);
+
+            Assert.IsType<CreatedAtActionResult>(result);
+            var source = await db.Sources.SingleAsync();
+            Assert.DoesNotContain("..", source.FilePath);
+            Assert.StartsWith(Path.Combine(uploadDir, user.Id), source.FilePath);
         }
         finally
         {
@@ -122,13 +238,21 @@ public class IngestionJobTests
         return notebook;
     }
 
-    private static SourcesController CreateSourcesController(AppDbContext db, string userId, string uploadDir, HttpMessageHandler handler)
+    private static SourcesController CreateSourcesController(
+        AppDbContext db,
+        string userId,
+        string uploadDir,
+        HttpMessageHandler handler,
+        long quotaBytes = 250L * 1024 * 1024,
+        long maxUploadBytes = 50L * 1024 * 1024)
     {
         var config = new ConfigurationBuilder()
             .AddInMemoryCollection(new Dictionary<string, string?>
             {
                 ["UPLOAD_DIR"] = uploadDir,
                 ["INTERNAL_SECRET"] = "test_internal_secret",
+                ["UPLOAD_USER_STORAGE_QUOTA_BYTES"] = quotaBytes.ToString(),
+                ["UPLOAD_MAX_FILE_BYTES"] = maxUploadBytes.ToString(),
             })
             .Build();
         var rag = new RagClient(new HttpClient(handler) { BaseAddress = new Uri("http://rag-server") }, config);

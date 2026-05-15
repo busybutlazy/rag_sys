@@ -20,6 +20,14 @@ if len(_JWT_SECRET) < _MIN_SECRET_LEN:
         f"JWT_SECRET must be at least {_MIN_SECRET_LEN} characters (got {len(_JWT_SECRET)})"
     )
 
+_AI_INTERNAL_SECRET = os.environ.get("AI_INTERNAL_SECRET") or os.environ.get("INTERNAL_SECRET", "")
+if len(_AI_INTERNAL_SECRET) < _MIN_SECRET_LEN:
+    raise SystemExit(f"AI_INTERNAL_SECRET must be at least {_MIN_SECRET_LEN} characters")
+
+_RAG_INTERNAL_SECRET = os.environ.get("RAG_INTERNAL_SECRET") or os.environ.get("INTERNAL_SECRET", "")
+if len(_RAG_INTERNAL_SECRET) < _MIN_SECRET_LEN:
+    raise SystemExit(f"RAG_INTERNAL_SECRET must be at least {_MIN_SECRET_LEN} characters")
+
 app = FastAPI(title="AI Server", version="0.1.0")
 
 _gateway = OpenAIGateway(api_key=os.environ.get("OPENAI_API_KEY", ""))
@@ -133,8 +141,7 @@ async def session_state_update(
     req: SessionStateUpdateRequest,
     x_internal_secret: str | None = Header(default=None),
 ):
-    expected = os.environ.get("INTERNAL_SECRET", "")
-    if not expected or x_internal_secret != expected:
+    if x_internal_secret != _AI_INTERNAL_SECRET:
         raise HTTPException(status_code=401, detail="Invalid internal secret")
 
     prev = req.prev_session_state or {}

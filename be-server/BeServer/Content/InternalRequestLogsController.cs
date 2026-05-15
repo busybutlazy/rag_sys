@@ -15,7 +15,9 @@ public class InternalRequestLogsController(AppDbContext db, IConfiguration confi
     [HttpPost]
     public async Task<IActionResult> Create([FromBody] InternalRequestLogRequest req)
     {
-        var expected = config["INTERNAL_SECRET"];
+        var expected = string.IsNullOrWhiteSpace(config["AI_INTERNAL_SECRET"])
+            ? config["INTERNAL_SECRET"]
+            : config["AI_INTERNAL_SECRET"];
         if (string.IsNullOrWhiteSpace(expected) || Request.Headers["X-Internal-Secret"].ToString() != expected)
             return Unauthorized();
 

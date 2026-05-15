@@ -1,4 +1,5 @@
 import os
+import asyncio
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, HTTPException, Header, Query
 from app.db import get_db
@@ -15,9 +16,10 @@ from app import chunker, embedder, experiments, vector_store
 
 configure_json_logging()
 
-_INTERNAL_SECRET = os.environ.get("INTERNAL_SECRET", "")
-if not _INTERNAL_SECRET:
-    raise SystemExit("INTERNAL_SECRET must be set")
+_MIN_SECRET_LEN = 32
+_INTERNAL_SECRET = os.environ.get("RAG_INTERNAL_SECRET") or os.environ.get("INTERNAL_SECRET", "")
+if len(_INTERNAL_SECRET) < _MIN_SECRET_LEN:
+    raise SystemExit(f"RAG_INTERNAL_SECRET must be at least {_MIN_SECRET_LEN} characters")
 
 
 def _check_secret(x_internal_secret: str | None) -> None:
@@ -71,7 +73,10 @@ async def ingest(
         docs_col.insert(doc_record)
 
     try:
-        text = chunker.extract_text(req.file_path, req.mime_type)
+        text = await asyncio.wait_for(
+            asyncio.to_thread(chunker.extract_text, req.file_path, req.mime_type),
+            timeout=float(os.environ.get("PARSER_TIMEOUT_SECONDS", "30")),
+        )
         chunks = chunker.chunk_text(text)
         if not chunks:
             raise ValueError("No text extracted from file")

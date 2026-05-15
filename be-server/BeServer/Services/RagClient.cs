@@ -4,7 +4,10 @@ namespace BeServer.Services;
 
 public class RagClient(HttpClient http, IConfiguration config)
 {
-    private string? InternalSecret => config["INTERNAL_SECRET"];
+    private string? InternalSecret =>
+        string.IsNullOrWhiteSpace(config["RAG_INTERNAL_SECRET"])
+            ? config["INTERNAL_SECRET"]
+            : config["RAG_INTERNAL_SECRET"];
 
     private void AddSecret(HttpRequestMessage req)
     {

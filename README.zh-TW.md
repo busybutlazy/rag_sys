@@ -132,7 +132,9 @@ cp .env.template .env
 | `ADMIN_USERNAME` | 是 | 內建單一使用者的登入帳號 |
 | `ADMIN_PASSWORD` | 是 | 登入密碼，請使用強密碼 |
 | `JWT_SECRET` | 是 | JWT 簽署密鑰，**最少 32 個字元** |
-| `INTERNAL_SECRET` | 是 | 服務間內部呼叫的共享密鑰 |
+| `INTERNAL_SECRET` | 是 | 內部服務呼叫的相容性 fallback |
+| `RAG_INTERNAL_SECRET` | 是 | 呼叫 `rag-server` 時使用的密鑰 |
+| `AI_INTERNAL_SECRET` | 是 | BE↔AI 與 AI→BE 內部呼叫使用的密鑰 |
 | `MYSQL_ROOT_PASSWORD` | 是 | MySQL root 密碼 |
 | `MYSQL_PASSWORD` | 是 | MySQL 應用程式用戶密碼 |
 | `ARANGO_ROOT_PASSWORD` | 是 | ArangoDB root 密碼 |

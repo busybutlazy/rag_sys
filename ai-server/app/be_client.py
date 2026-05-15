@@ -4,7 +4,7 @@ from typing import Any
 import httpx
 
 _BE_URL = os.environ.get("BE_SERVER_URL", "http://be-server:8001")
-_SECRET = os.environ.get("INTERNAL_SECRET", "")
+_SECRET = os.environ.get("AI_INTERNAL_SECRET") or os.environ.get("INTERNAL_SECRET", "")
 _TIMEOUT = 15.0
 
 

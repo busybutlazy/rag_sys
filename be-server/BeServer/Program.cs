@@ -15,6 +15,7 @@ builder.Logging.ClearProviders();
 builder.Logging.AddJsonConsole();
 
 ValidateProductionSecrets(builder.Configuration, builder.Environment);
+ValidateInternalSecrets(builder.Configuration);
 
 // ── Database ─────────────────────────────────────
 var connStr =
@@ -163,6 +164,21 @@ static void ValidateProductionSecrets(IConfiguration config, IWebHostEnvironment
     RejectDefault("ADMIN_PASSWORD", config["ADMIN_PASSWORD"], "changeme", "changeme_strong_password");
     RejectDefault("DB_PASSWORD", config["DB_PASSWORD"], "ragpass", "password", "changeme");
 }
+
+static void ValidateInternalSecrets(IConfiguration config)
+{
+    ValidateMinLength("RAG_INTERNAL_SECRET", FirstConfigured(config["RAG_INTERNAL_SECRET"], config["INTERNAL_SECRET"]));
+    ValidateMinLength("AI_INTERNAL_SECRET", FirstConfigured(config["AI_INTERNAL_SECRET"], config["INTERNAL_SECRET"]));
+}
+
+static void ValidateMinLength(string name, string? value)
+{
+    if (string.IsNullOrWhiteSpace(value) || value.Length < JwtConstants.MinSecretLength)
+        throw new InvalidOperationException($"{name} must be at least {JwtConstants.MinSecretLength} characters.");
+}
+
+static string? FirstConfigured(params string?[] values) =>
+    values.FirstOrDefault(value => !string.IsNullOrWhiteSpace(value));
 
 static void RejectDefault(string name, string? value, params string[] defaults)
 {

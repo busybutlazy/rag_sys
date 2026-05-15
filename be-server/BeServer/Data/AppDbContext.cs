@@ -72,6 +72,8 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             e.Property(s => s.Title).HasMaxLength(512).IsRequired();
             e.Property(s => s.FilePath).HasMaxLength(1024);
             e.Property(s => s.MimeType).HasMaxLength(128);
+            e.Property(s => s.OriginalContentType).HasMaxLength(128);
+            e.Property(s => s.DetectedMimeType).HasMaxLength(128);
             e.Property(s => s.Status).HasMaxLength(32);
             e.Property(s => s.CreatedAt).HasColumnType("datetime");
             e.Property(s => s.UpdatedAt).HasColumnType("datetime");

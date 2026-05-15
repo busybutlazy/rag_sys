@@ -6,6 +6,9 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.AspNetCore.RateLimiting;
+using System.IO.Compression;
+using System.Text;
+using System.Text.Json;
 
 namespace BeServer.Content;
 
@@ -28,6 +31,16 @@ public class SourcesController(
         "application/msword",
         "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
     ];
+    private static readonly Dictionary<string, HashSet<string>> AllowedExtensionsByMime = new(StringComparer.OrdinalIgnoreCase)
+    {
+        ["application/pdf"] = [".pdf"],
+        ["text/plain"] = [".txt"],
+        ["text/markdown"] = [".md", ".markdown"],
+        ["text/x-markdown"] = [".md", ".markdown"],
+        ["text/csv"] = [".csv"],
+        ["application/json"] = [".json"],
+        ["application/vnd.openxmlformats-officedocument.wordprocessingml.document"] = [".docx"],
+    };
 
     private string UserId
     {
@@ -41,6 +54,9 @@ public class SourcesController(
     }
 
     private string UploadDir => config["UPLOAD_DIR"] ?? "/app/uploads";
+    private long MaxUploadBytes => config.GetValue<long?>("UPLOAD_MAX_FILE_BYTES") ?? 50L * 1024 * 1024;
+    private long UserStorageQuotaBytes => config.GetValue<long?>("UPLOAD_USER_STORAGE_QUOTA_BYTES") ?? 250L * 1024 * 1024;
+    private int NotebookSourceLimit => config.GetValue<int?>("UPLOAD_NOTEBOOK_SOURCE_LIMIT") ?? 100;
 
     [HttpGet]
     public async Task<IActionResult> List(string notebookId)
@@ -82,11 +98,8 @@ public class SourcesController(
     {
         if (file.Length == 0)
             return BadRequest(new { error = "File is empty." });
-
-        // SEC-03: MIME type allowlist — strip charset/boundary params before checking
-        var mimeType = file.ContentType.Split(';')[0].Trim().ToLowerInvariant();
-        if (!AllowedMimeTypes.Contains(mimeType))
-            return BadRequest(new { error = $"File type '{mimeType}' is not allowed." });
+        if (file.Length > MaxUploadBytes)
+            return BadRequest(new { error = $"File exceeds upload limit of {MaxUploadBytes} bytes." });
 
         var nb = await db.Notebooks.FirstOrDefaultAsync(n => n.Id == notebookId && n.UserId == UserId);
         if (nb is null) return NotFound(new { error = "Notebook not found" });
@@ -98,12 +111,38 @@ public class SourcesController(
             .Replace('\0', '_');
         if (string.IsNullOrWhiteSpace(safeFileName)) safeFileName = "upload";
 
+        var sourceCount = await db.Sources.CountAsync(s => s.NotebookId == notebookId && s.UserId == UserId);
+        if (sourceCount >= NotebookSourceLimit)
+            return BadRequest(new { error = $"Notebook source limit of {NotebookSourceLimit} reached." });
+
+        var usedBytes = await db.Sources
+            .Where(s => s.UserId == UserId)
+            .SumAsync(s => s.FileSizeBytes ?? 0);
+        if (usedBytes + file.Length > UserStorageQuotaBytes)
+            return BadRequest(new { error = "User storage quota exceeded." });
+
+        var originalContentType = NormalizeMime(file.ContentType);
+        var extension = Path.GetExtension(safeFileName);
+        await using var detectionStream = file.OpenReadStream();
+        var detectedMimeType = await DetectMimeTypeAsync(detectionStream, extension);
+        if (detectedMimeType is null || !AllowedMimeTypes.Contains(detectedMimeType))
+            return BadRequest(new { error = "File type could not be validated or is not allowed." });
+
+        if (!AllowedExtensionsByMime.TryGetValue(detectedMimeType, out var allowedExtensions) ||
+            !allowedExtensions.Contains(extension))
+            return BadRequest(new { error = $"File extension '{extension}' does not match detected type '{detectedMimeType}'." });
+
+        if (!IsClaimCompatible(originalContentType, detectedMimeType))
+            return BadRequest(new { error = $"Claimed file type '{originalContentType}' does not match detected type '{detectedMimeType}'." });
+
         var source = new Source
         {
             UserId = UserId,
             NotebookId = notebookId,
             Title = file.FileName,
-            MimeType = mimeType,
+            MimeType = NormalizeForIngestion(detectedMimeType),
+            OriginalContentType = originalContentType,
+            DetectedMimeType = detectedMimeType,
             FileSizeBytes = file.Length,
             Status = IngestionJobStatuses.Queued,
         };
@@ -167,6 +206,85 @@ public class SourcesController(
                 source.Status,
                 source.CreatedAt,
                 new IngestionJobDto(job.Id, job.Status, job.AttemptCount, job.MaxAttempts, job.LastError, job.UpdatedAt)));
+    }
+
+    private static string NormalizeMime(string? contentType) =>
+        (contentType ?? "").Split(';')[0].Trim().ToLowerInvariant();
+
+    private static string NormalizeForIngestion(string detectedMimeType) =>
+        detectedMimeType == "text/x-markdown" ? "text/markdown" : detectedMimeType;
+
+    private static bool IsClaimCompatible(string claimed, string detected)
+    {
+        if (claimed == detected) return true;
+        return detected == "text/markdown" && claimed == "text/x-markdown"
+            || detected == "text/x-markdown" && claimed == "text/markdown";
+    }
+
+    private static async Task<string?> DetectMimeTypeAsync(Stream stream, string extension)
+    {
+        using var buffer = new MemoryStream();
+        await stream.CopyToAsync(buffer);
+        var bytes = buffer.ToArray();
+        if (bytes.Length >= 5 && Encoding.ASCII.GetString(bytes, 0, 5) == "%PDF-")
+            return "application/pdf";
+
+        if (IsDocx(bytes))
+            return "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
+
+        if (!LooksLikeUtf8Text(bytes))
+            return null;
+
+        var text = Encoding.UTF8.GetString(bytes);
+        try
+        {
+            using var _ = JsonDocument.Parse(text);
+            return "application/json";
+        }
+        catch (JsonException)
+        {
+            // text-like formats continue below
+        }
+
+        return extension.ToLowerInvariant() switch
+        {
+            ".txt" => "text/plain",
+            ".md" or ".markdown" => "text/markdown",
+            ".csv" => "text/csv",
+            _ => null,
+        };
+    }
+
+    private static bool IsDocx(byte[] bytes)
+    {
+        if (bytes.Length < 4 || bytes[0] != 0x50 || bytes[1] != 0x4B)
+            return false;
+        try
+        {
+            using var ms = new MemoryStream(bytes);
+            using var archive = new ZipArchive(ms, ZipArchiveMode.Read, leaveOpen: false);
+            return archive.GetEntry("[Content_Types].xml") is not null &&
+                   archive.Entries.Any(e => e.FullName.StartsWith("word/", StringComparison.OrdinalIgnoreCase));
+        }
+        catch (InvalidDataException)
+        {
+            return false;
+        }
+    }
+
+    private static bool LooksLikeUtf8Text(byte[] bytes)
+    {
+        if (bytes.Any(b => b == 0))
+            return false;
+        try
+        {
+            _ = new UTF8Encoding(false, true).GetString(bytes);
+            return true;
+        }
+        catch (DecoderFallbackException)
+        {
+            return false;
+        }
     }
 
     [HttpGet("{id}/ingestion-job")]
