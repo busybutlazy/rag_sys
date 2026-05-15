@@ -48,6 +48,7 @@ async def log_request(
     status_code: int | None = None,
     duration_ms: int | None = None,
     error: str | None = None,
+    correlation_id: str | None = None,
 ) -> None:
     if not _SECRET:
         return
@@ -65,11 +66,14 @@ async def log_request(
         "duration_ms": duration_ms,
         "error": error,
     }
+    headers: dict[str, str] = {"X-Internal-Secret": _SECRET}
+    if correlation_id:
+        headers["X-Correlation-Id"] = correlation_id
     try:
         async with httpx.AsyncClient(timeout=_TIMEOUT) as client:
             await client.post(
                 f"{_BE_URL}/internal/request-logs",
-                headers={"X-Internal-Secret": _SECRET},
+                headers=headers,
                 json=payload,
             )
     except Exception:

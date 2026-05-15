@@ -6,23 +6,40 @@ _SECRET = os.environ.get("RAG_INTERNAL_SECRET") or os.environ.get("INTERNAL_SECR
 _TIMEOUT = 15.0
 
 
-async def search(query: str, notebook_id: str, top_k: int = 5) -> list[dict]:
+def _headers(correlation_id: str | None = None) -> dict[str, str]:
+    h = {"X-Internal-Secret": _SECRET}
+    if correlation_id:
+        h["X-Correlation-Id"] = correlation_id
+    return h
+
+
+async def search(
+    query: str,
+    notebook_id: str,
+    top_k: int = 5,
+    correlation_id: str | None = None,
+) -> list[dict]:
     async with httpx.AsyncClient(timeout=_TIMEOUT) as client:
         res = await client.get(
             f"{_RAG_URL}/search/hybrid",
             params={"q": query, "notebook_id": notebook_id, "top_k": top_k},
-            headers={"X-Internal-Secret": _SECRET},
+            headers=_headers(correlation_id),
         )
         res.raise_for_status()
         return res.json()["results"]
 
 
-async def get_source_content(source_id: str, notebook_id: str, max_chars: int = 12000) -> dict:
+async def get_source_content(
+    source_id: str,
+    notebook_id: str,
+    max_chars: int = 12000,
+    correlation_id: str | None = None,
+) -> dict:
     async with httpx.AsyncClient(timeout=_TIMEOUT) as client:
         res = await client.get(
             f"{_RAG_URL}/documents/{source_id}/content",
             params={"notebook_id": notebook_id, "max_chars": max_chars},
-            headers={"X-Internal-Secret": _SECRET},
+            headers=_headers(correlation_id),
         )
         res.raise_for_status()
         return res.json()

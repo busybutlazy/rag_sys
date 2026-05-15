@@ -48,6 +48,7 @@ async def health():
 async def chat_completions(
     req: ChatRequest,
     _user_id: str = Depends(get_current_user),
+    x_correlation_id: str | None = Header(default=None),
 ):
     messages = [m.model_dump() for m in req.messages]
     sources: list[dict] = []
@@ -59,7 +60,7 @@ async def chat_completions(
             query = user_messages[-1].content
             started = time.perf_counter()
             try:
-                sources = await rag_client.search(query, req.notebook_id)
+                sources = await rag_client.search(query, req.notebook_id, correlation_id=x_correlation_id)
                 await be_client.log_request(
                     chat_request_id=req.request_id,
                     session_id=req.session_id,
@@ -69,6 +70,7 @@ async def chat_completions(
                     request_json={"query": query, "notebook_id": req.notebook_id, "top_k": 5},
                     response_json={"result_count": len(sources)},
                     duration_ms=int((time.perf_counter() - started) * 1000),
+                    correlation_id=x_correlation_id,
                 )
             except Exception as exc:
                 await be_client.log_request(
@@ -80,6 +82,7 @@ async def chat_completions(
                     request_json={"query": query, "notebook_id": req.notebook_id, "top_k": 5},
                     duration_ms=int((time.perf_counter() - started) * 1000),
                     error=str(exc),
+                    correlation_id=x_correlation_id,
                 )
                 sources = []
 
@@ -117,6 +120,7 @@ async def chat_completions(
                 request_json={"model": req.model, "message_count": len(messages), "stream": True},
                 response_json={"completed": True},
                 duration_ms=int((time.perf_counter() - started) * 1000),
+                correlation_id=x_correlation_id,
             )
         except Exception as exc:
             await be_client.log_request(
@@ -128,6 +132,7 @@ async def chat_completions(
                 request_json={"model": req.model, "message_count": len(messages), "stream": True},
                 duration_ms=int((time.perf_counter() - started) * 1000),
                 error=str(exc),
+                correlation_id=x_correlation_id,
             )
             yield f"data: {json.dumps({'error': str(exc)})}\n\n"
         finally:
@@ -140,6 +145,7 @@ async def chat_completions(
 async def session_state_update(
     req: SessionStateUpdateRequest,
     x_internal_secret: str | None = Header(default=None),
+    x_correlation_id: str | None = Header(default=None),
 ):
     if x_internal_secret != _AI_INTERNAL_SECRET:
         raise HTTPException(status_code=401, detail="Invalid internal secret")
@@ -203,6 +209,7 @@ async def session_state_update(
             request_json={"model": "gpt-4o-mini"},
             response_json={"completed": True},
             duration_ms=int((time.perf_counter() - started) * 1000),
+            correlation_id=x_correlation_id,
         )
         return state
     except Exception as exc:
@@ -215,6 +222,7 @@ async def session_state_update(
             request_json={"model": "gpt-4o-mini"},
             duration_ms=int((time.perf_counter() - started) * 1000),
             error=str(exc),
+            correlation_id=x_correlation_id,
         )
         return fallback
 
@@ -224,10 +232,11 @@ async def agent_run(
     req: AgentRunRequest,
     _user_id: str = Depends(get_current_user),
     authorization: str | None = Header(default=None),
+    x_correlation_id: str | None = Header(default=None),
 ):
     async def event_stream():
         try:
-            async for event in stream_agent_events(req, authorization):
+            async for event in stream_agent_events(req, authorization, x_correlation_id):
                 yield f"data: {json.dumps(event, ensure_ascii=False)}\n\n"
         except Exception as exc:
             yield f"data: {json.dumps({'error': str(exc)})}\n\n"

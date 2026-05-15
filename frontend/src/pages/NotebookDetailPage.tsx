@@ -1,7 +1,6 @@
 import { useEffect, useState, useCallback } from 'react'
-import type { FormEvent } from 'react'
 import { useParams, Link } from 'react-router-dom'
-import { apiGet, apiPost, apiUpload, apiDelete } from '../lib/api'
+import { apiGet, apiUpload, apiDelete } from '../lib/api'
 import { useAuthContext } from '../contexts/AuthContext'
 import ChatPanel from '../components/ChatPanel'
 import NotebookSourcesPanel from '../components/NotebookSourcesPanel'
@@ -43,8 +42,6 @@ export default function NotebookDetailPage() {
   const { accessToken } = useAuthContext()
   const getToken = useCallback(() => accessToken, [accessToken])
   const [nb, setNb] = useState<NotebookDetail | null>(null)
-  const [noteContent, setNoteContent] = useState('')
-  const [noteTitle, setNoteTitle] = useState('')
   const [activeTab, setActiveTab] = useState<WorkspaceTab>('overview')
   const [tabNavOpen, setTabNavOpen] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -76,20 +73,6 @@ export default function NotebookDetailPage() {
     }
   }
 
-  async function createNote(e: FormEvent) {
-    e.preventDefault()
-    try {
-      await apiPost(`/api/notebooks/${id}/notes`, { title: noteTitle || null, content: noteContent })
-      setNoteContent('')
-      setNoteTitle('')
-      await reload()
-      setError(null)
-    } catch (err) {
-      console.error('Save note failed', err)
-      setError('Failed to save note.')
-    }
-  }
-
   async function deleteSource(sourceId: string) {
     try {
       await apiDelete(`/api/notebooks/${id}/sources/${sourceId}`)
@@ -98,17 +81,6 @@ export default function NotebookDetailPage() {
     } catch (err) {
       console.error('Delete failed', err)
       setError('Failed to delete source.')
-    }
-  }
-
-  async function deleteNote(noteId: string) {
-    try {
-      await apiDelete(`/api/notebooks/${id}/notes/${noteId}`)
-      await reload()
-      setError(null)
-    } catch (err) {
-      console.error('Delete note failed', err)
-      setError('Failed to delete note.')
     }
   }
 
@@ -260,13 +232,9 @@ export default function NotebookDetailPage() {
 
           {activeTab === 'notes' && (
             <NotebookNotesPanel
+              notebookId={nb.id}
               notes={nb.notes}
-              title={noteTitle}
-              content={noteContent}
-              onTitleChange={setNoteTitle}
-              onContentChange={setNoteContent}
-              onSubmit={createNote}
-              onDelete={deleteNote}
+              onNotesChanged={reload}
             />
           )}
 
