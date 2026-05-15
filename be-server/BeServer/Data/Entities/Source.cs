@@ -8,6 +8,8 @@ public class Source
     public string Title { get; set; } = null!;
     public string? FilePath { get; set; }
     public string? MimeType { get; set; }
+    public string? OriginalContentType { get; set; }
+    public string? DetectedMimeType { get; set; }
     public long? FileSizeBytes { get; set; }
     public string Status { get; set; } = "uploaded";
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;

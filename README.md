@@ -132,7 +132,9 @@ Open `.env` and fill in the required values:
 | `ADMIN_USERNAME` | Yes | Login username for the single built-in user |
 | `ADMIN_PASSWORD` | Yes | Login password — use something strong |
 | `JWT_SECRET` | Yes | JWT signing secret, **minimum 32 characters** |
-| `INTERNAL_SECRET` | Yes | Shared secret for internal service-to-service calls |
+| `INTERNAL_SECRET` | Yes | Legacy fallback for internal service-to-service calls |
+| `RAG_INTERNAL_SECRET` | Yes | Secret used by callers reaching `rag-server` |
+| `AI_INTERNAL_SECRET` | Yes | Secret used for BE↔AI and AI→BE internal calls |
 | `MYSQL_ROOT_PASSWORD` | Yes | MySQL root password |
 | `MYSQL_PASSWORD` | Yes | MySQL application user password |
 | `ARANGO_ROOT_PASSWORD` | Yes | ArangoDB root password |

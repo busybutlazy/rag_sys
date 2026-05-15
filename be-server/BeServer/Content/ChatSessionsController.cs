@@ -418,7 +418,9 @@ public class ChatSessionsController(
             var client = httpClientFactory.CreateClient("ai-server");
             using var httpReq = new HttpRequestMessage(HttpMethod.Post, "/session-state/update");
             httpReq.Content = new StringContent(JsonSerializer.Serialize(body, JsonOptions), Encoding.UTF8, "application/json");
-            var secret = config["INTERNAL_SECRET"];
+            var secret = string.IsNullOrWhiteSpace(config["AI_INTERNAL_SECRET"])
+                ? config["INTERNAL_SECRET"]
+                : config["AI_INTERNAL_SECRET"];
             if (!string.IsNullOrWhiteSpace(secret))
                 httpReq.Headers.Add("X-Internal-Secret", secret);
 

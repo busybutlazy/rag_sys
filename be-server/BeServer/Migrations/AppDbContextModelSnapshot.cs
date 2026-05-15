@@ -71,6 +71,8 @@ namespace BeServer.Migrations
                 b.Property<string>("FilePath").HasMaxLength(1024).HasColumnType("varchar(1024)");
                 b.Property<long?>("FileSizeBytes").HasColumnType("bigint");
                 b.Property<string>("MimeType").HasMaxLength(128).HasColumnType("varchar(128)");
+                b.Property<string>("OriginalContentType").HasMaxLength(128).HasColumnType("varchar(128)");
+                b.Property<string>("DetectedMimeType").HasMaxLength(128).HasColumnType("varchar(128)");
                 b.Property<string>("NotebookId").IsRequired().HasMaxLength(36).HasColumnType("varchar(36)");
                 b.Property<string>("Status").IsRequired().HasMaxLength(32).HasColumnType("varchar(32)").HasDefaultValue("uploaded");
                 b.Property<string>("Title").IsRequired().HasMaxLength(512).HasColumnType("varchar(512)");

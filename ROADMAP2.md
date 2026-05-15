@@ -147,37 +147,45 @@ Phase 9 was implemented on `phase-9-reliable-ingestion-jobs`. Source uploads now
 
 **Goal:** Harden file and internal-service attack surfaces.
 
-- [ ] Replace client-provided MIME trust with server-side validation:
-  - [ ] Check file signature/magic bytes for PDF, DOCX, JSON/text-like files.
-  - [ ] Cross-check extension, content type, and detected type.
-  - [ ] Store detected MIME separately from original content type.
-- [ ] Add parser limits:
-  - [ ] Max PDF pages.
-  - [ ] Max extracted characters.
-  - [ ] Max JSON size/depth.
-  - [ ] Max DOCX paragraphs/text length.
-  - [ ] Parser timeout or worker cancellation.
-- [ ] Add upload limits:
-  - [ ] Enforce per-user total storage quota.
-  - [ ] Enforce per-notebook source count limit.
-  - [ ] Reject empty files.
-- [ ] Protect internal APIs beyond a single raw shared secret:
-  - [ ] Enforce minimum `INTERNAL_SECRET` length in all services.
-  - [ ] Use different internal secrets per caller where practical.
-  - [ ] Add rotation plan.
-  - [ ] Consider service JWT or mTLS before multi-host deployment.
-- [ ] Add Nginx response headers:
-  - [ ] `X-Content-Type-Options: nosniff`
-  - [ ] `Referrer-Policy`
-  - [ ] minimal `Content-Security-Policy`
-- [ ] Add security tests:
-  - [ ] spoofed MIME type upload
-  - [ ] unsupported file upload
-  - [ ] oversized upload
-  - [ ] missing/invalid internal secret
-  - [ ] path traversal filename cases
+- [x] Replace client-provided MIME trust with server-side validation:
+  - [x] Check file signature/magic bytes for PDF, DOCX, JSON/text-like files.
+  - [x] Cross-check extension, content type, and detected type.
+  - [x] Store detected MIME separately from original content type.
+- [x] Add parser limits:
+  - [x] Max PDF pages.
+  - [x] Max extracted characters.
+  - [x] Max JSON size/depth.
+  - [x] Max DOCX paragraphs/text length.
+  - [x] Parser timeout or worker cancellation.
+- [x] Add upload limits:
+  - [x] Enforce per-user total storage quota.
+  - [x] Enforce per-notebook source count limit.
+  - [x] Reject empty files.
+- [x] Protect internal APIs beyond a single raw shared secret:
+  - [x] Enforce minimum `INTERNAL_SECRET` length in all services.
+  - [x] Use different internal secrets per caller where practical.
+  - [x] Add rotation plan.
+  - [x] Consider service JWT or mTLS before multi-host deployment.
+- [x] Add Nginx response headers:
+  - [x] `X-Content-Type-Options: nosniff`
+  - [x] `Referrer-Policy`
+  - [x] minimal `Content-Security-Policy`
+- [x] Add security tests:
+  - [x] spoofed MIME type upload
+  - [x] unsupported file upload
+  - [x] oversized upload
+  - [x] missing/invalid internal secret
+  - [x] path traversal filename cases
 
 **Deliverable:** Upload and internal endpoints fail closed with clear limits.
+
+**Current status (2026-05-15):** Implemented on `phase-10-upload-parser-internal-api-security`. Uploads now validate detected content against the extension and claimed MIME type, persist original and detected MIME metadata, enforce storage/source-count limits, and reject ambiguous files. RAG extraction now has page/character/JSON/DOCX limits plus a timeout. Internal service credentials are split into RAG and AI trust boundaries with minimum-length checks, a documented rotation path, and compatibility fallback during local migration. Frontend nginx now emits baseline hardening headers.
+
+**Verification:**
+- `docker run --rm -v /home/jett/Documents/rag_sys/be-server:/src -w /src mcr.microsoft.com/dotnet/sdk:8.0 dotnet test BeServer.Tests/BeServer.Tests.csproj --logger "console;verbosity=minimal"`
+- `python3 -m compileall rag-server/app ai-server/app`
+- `npm run build` in `frontend/`
+- `docker compose build be-server ai-server rag-server frontend`
 
 **Review references:**
 - `be-server/BeServer/Content/SourcesController.cs`

@@ -2,7 +2,7 @@ import os
 import httpx
 
 _RAG_URL = os.environ.get("RAG_SERVER_URL", "http://rag-server:8003")
-_SECRET = os.environ.get("INTERNAL_SECRET", "")
+_SECRET = os.environ.get("RAG_INTERNAL_SECRET") or os.environ.get("INTERNAL_SECRET", "")
 _TIMEOUT = 15.0
 
 
