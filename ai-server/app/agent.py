@@ -74,6 +74,7 @@ _TOOLS: list[dict[str, Any]] = [
 async def stream_agent_events(
     req: AgentRunRequest,
     authorization: str | None,
+    correlation_id: str | None = None,
 ) -> AsyncGenerator[dict[str, Any], None]:
     messages: list[dict[str, Any]] = [
         {
@@ -101,6 +102,7 @@ async def stream_agent_events(
                 request_json={"model": req.model, "step": step, "message_count": len(messages)},
                 response_json={"tool_calls": len(response.choices[0].message.tool_calls or [])},
                 duration_ms=int((time.perf_counter() - started) * 1000),
+                correlation_id=correlation_id,
             )
         except Exception as exc:
             await be_client.log_request(
@@ -112,6 +114,7 @@ async def stream_agent_events(
                 request_json={"model": req.model, "step": step, "message_count": len(messages)},
                 duration_ms=int((time.perf_counter() - started) * 1000),
                 error=str(exc),
+                correlation_id=correlation_id,
             )
             raise
         message = response.choices[0].message
@@ -133,7 +136,7 @@ async def stream_agent_events(
             }
             try:
                 tool_started = time.perf_counter()
-                result = await _run_tool(name, args, req.notebook_id, authorization)
+                result = await _run_tool(name, args, req.notebook_id, authorization, correlation_id)
                 ok = True
             except Exception as exc:
                 result = {"error": str(exc)}
@@ -148,6 +151,7 @@ async def stream_agent_events(
                 response_json=_loggable_result(result),
                 duration_ms=int((time.perf_counter() - tool_started) * 1000),
                 error=None if ok else str(result.get("error")),
+                correlation_id=correlation_id,
             )
 
             yield {
@@ -192,6 +196,7 @@ async def stream_agent_events(
             request_json={"model": req.model, "message_count": len(messages), "stream": True},
             response_json={"completed": True},
             duration_ms=int((time.perf_counter() - started) * 1000),
+            correlation_id=correlation_id,
         )
     except Exception as exc:
         await be_client.log_request(
@@ -203,6 +208,7 @@ async def stream_agent_events(
             request_json={"model": req.model, "message_count": len(messages), "stream": True},
             duration_ms=int((time.perf_counter() - started) * 1000),
             error=str(exc),
+            correlation_id=correlation_id,
         )
         raise
 
@@ -212,6 +218,7 @@ async def _run_tool(
     args: dict[str, Any],
     active_notebook_id: str | None,
     authorization: str | None,
+    correlation_id: str | None = None,
 ) -> Any:
     if name == "list_notebooks":
         return await be_client.list_notebooks(authorization)
@@ -220,13 +227,13 @@ async def _run_tool(
         notebook_id = _require_notebook(active_notebook_id)
         query = _require_string(args, "query")
         top_k = _bounded_int(args.get("top_k", 5), 1, 10)
-        return await rag_client.search(query, notebook_id, top_k)
+        return await rag_client.search(query, notebook_id, top_k, correlation_id)
 
     if name == "get_source_content":
         notebook_id = _require_notebook(active_notebook_id)
         source_id = _require_string(args, "source_id")
         max_chars = _bounded_int(args.get("max_chars", 12000), 1000, 50000)
-        return await rag_client.get_source_content(source_id, notebook_id, max_chars)
+        return await rag_client.get_source_content(source_id, notebook_id, max_chars, correlation_id)
 
     if name == "create_note":
         notebook_id = args.get("notebook_id") or active_notebook_id

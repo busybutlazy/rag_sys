@@ -11,7 +11,7 @@ public class Source
     public string? OriginalContentType { get; set; }
     public string? DetectedMimeType { get; set; }
     public long? FileSizeBytes { get; set; }
-    public string Status { get; set; } = "uploaded";
+    public string Status { get; set; } = SourceStatuses.Uploaded;
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
     public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
 

@@ -430,19 +430,19 @@ public class ChatSessionsController(
             entity.StateJson = ToLimitedJson(task.State);
             entity.UpdatedFromRequestId = requestId;
             entity.UpdatedAt = now;
-            entity.CompletedAt = task.Status is "done" or "cancelled" ? entity.CompletedAt ?? now : null;
+            entity.CompletedAt = task.Status is SessionTaskStatuses.Done or SessionTaskStatuses.Cancelled ? entity.CompletedAt ?? now : null;
             seen.Add(task.Id);
         }
 
         foreach (var stale in existing.Values.Where(t => !seen.Contains(t.Id)))
         {
-            stale.Status = "cancelled";
+            stale.Status = SessionTaskStatuses.Cancelled;
             stale.UpdatedFromRequestId = requestId;
             stale.UpdatedAt = now;
             stale.CompletedAt ??= now;
         }
 
-        var active = tasks.FirstOrDefault(t => t.Status == "active");
+        var active = tasks.FirstOrDefault(t => t.Status == SessionTaskStatuses.Active);
         session.ActiveTaskId = active?.Id;
     }
 
@@ -464,8 +464,8 @@ public class ChatSessionsController(
                 if (string.IsNullOrWhiteSpace(id)) id = $"task-{Guid.NewGuid():N}";
                 var status = item.TryGetProperty("status", out var statusProp) && statusProp.ValueKind == JsonValueKind.String
                     ? statusProp.GetString()
-                    : "paused";
-                if (status is not ("active" or "paused" or "done" or "cancelled")) status = "paused";
+                    : SessionTaskStatuses.Paused;
+                if (status is not (SessionTaskStatuses.Active or SessionTaskStatuses.Paused or SessionTaskStatuses.Done or SessionTaskStatuses.Cancelled)) status = SessionTaskStatuses.Paused;
                 var summary = item.TryGetProperty("summary", out var summaryProp) && summaryProp.ValueKind == JsonValueKind.String
                     ? summaryProp.GetString()
                     : null;
@@ -474,21 +474,21 @@ public class ChatSessionsController(
         }
 
         if (tasks.Count == 0)
-            tasks.Add(new SessionTaskProjection($"task-{Guid.NewGuid():N}", "Conversation", null, "active", []));
+            tasks.Add(new SessionTaskProjection($"task-{Guid.NewGuid():N}", "Conversation", null, SessionTaskStatuses.Active, []));
 
         var activeSeen = false;
         for (var i = 0; i < tasks.Count; i++)
         {
-            if (tasks[i].Status == "active")
+            if (tasks[i].Status == SessionTaskStatuses.Active)
             {
                 if (!activeSeen) activeSeen = true;
-                else tasks[i] = tasks[i] with { Status = "paused" };
+                else tasks[i] = tasks[i] with { Status = SessionTaskStatuses.Paused };
             }
         }
         if (!activeSeen)
         {
-            var idx = tasks.FindIndex(t => t.Status == "paused");
-            tasks[idx >= 0 ? idx : 0] = tasks[idx >= 0 ? idx : 0] with { Status = "active" };
+            var idx = tasks.FindIndex(t => t.Status == SessionTaskStatuses.Paused);
+            tasks[idx >= 0 ? idx : 0] = tasks[idx >= 0 ? idx : 0] with { Status = SessionTaskStatuses.Active };
         }
 
         state["topic_stack"] = tasks.Select(t =>
