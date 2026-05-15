@@ -1,6 +1,6 @@
-using System.Security.Claims;
 using BeServer.Data;
 using BeServer.Data.Entities;
+using BeServer.Services;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -10,18 +10,9 @@ namespace BeServer.Content;
 [ApiController]
 [Route("api/notebooks")]
 [Authorize]
-public class NotebooksController(AppDbContext db) : ControllerBase
+public class NotebooksController(AppDbContext db, CurrentUserAccessor currentUser) : ControllerBase
 {
-    private string UserId
-    {
-        get
-        {
-            var id = User.FindFirstValue(ClaimTypes.NameIdentifier) ?? User.FindFirstValue("sub");
-            if (string.IsNullOrEmpty(id))
-                throw new InvalidOperationException("JWT is missing user identity claim.");
-            return id;
-        }
-    }
+    private string UserId => currentUser.UserId;
 
     [HttpGet]
     public async Task<IActionResult> List() =>

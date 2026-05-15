@@ -79,8 +79,10 @@ public class NotebookAndSearchControllerTests
 
     private static NotebooksController CreateNotebooksController(AppDbContext db, string userId)
     {
-        var controller = new NotebooksController(db);
-        controller.ControllerContext = ControllerContextFor(userId);
+        var context = ControllerContextFor(userId);
+        var accessor = new HttpContextAccessor { HttpContext = context.HttpContext };
+        var controller = new NotebooksController(db, new CurrentUserAccessor(accessor));
+        controller.ControllerContext = context;
         return controller;
     }
 
@@ -92,9 +94,12 @@ public class NotebookAndSearchControllerTests
                 ["RAG_INTERNAL_SECRET"] = "this_is_a_long_test_secret_for_rag_boundary",
             })
             .Build();
-        var rag = new RagClient(new HttpClient(new FakeHandler()) { BaseAddress = new Uri("http://rag-server") }, config);
-        var controller = new SearchController(db, rag);
-        controller.ControllerContext = ControllerContextFor(userId);
+        var context = ControllerContextFor(userId);
+        var accessor = new HttpContextAccessor { HttpContext = context.HttpContext };
+        var currentUser = new CurrentUserAccessor(accessor);
+        var rag = new RagClient(new HttpClient(new FakeHandler()) { BaseAddress = new Uri("http://rag-server") }, config, accessor);
+        var controller = new SearchController(new OwnershipService(db, currentUser), rag);
+        controller.ControllerContext = context;
         return controller;
     }
 

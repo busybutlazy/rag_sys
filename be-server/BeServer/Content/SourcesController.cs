@@ -1,4 +1,3 @@
-using System.Security.Claims;
 using BeServer.Data;
 using BeServer.Data.Entities;
 using BeServer.Services;
@@ -18,7 +17,9 @@ namespace BeServer.Content;
 public class SourcesController(
     AppDbContext db,
     RagClient rag,
-    IConfiguration config) : ControllerBase
+    IConfiguration config,
+    CurrentUserAccessor currentUser,
+    OwnershipService ownership) : ControllerBase
 {
     private static readonly HashSet<string> AllowedMimeTypes =
     [
@@ -42,16 +43,7 @@ public class SourcesController(
         ["application/vnd.openxmlformats-officedocument.wordprocessingml.document"] = [".docx"],
     };
 
-    private string UserId
-    {
-        get
-        {
-            var id = User.FindFirstValue(ClaimTypes.NameIdentifier) ?? User.FindFirstValue("sub");
-            if (string.IsNullOrEmpty(id))
-                throw new InvalidOperationException("JWT is missing user identity claim.");
-            return id;
-        }
-    }
+    private string UserId => currentUser.UserId;
 
     private string UploadDir => config["UPLOAD_DIR"] ?? "/app/uploads";
     private long MaxUploadBytes => config.GetValue<long?>("UPLOAD_MAX_FILE_BYTES") ?? 50L * 1024 * 1024;
@@ -62,8 +54,8 @@ public class SourcesController(
     public async Task<IActionResult> List(string notebookId)
     {
         // Verify notebook belongs to user (LOGIC-05)
-        if (!await db.Notebooks.AnyAsync(n => n.Id == notebookId && n.UserId == UserId))
-            return NotFound(new { error = "Notebook not found" });
+        if (!await ownership.NotebookExistsAsync(notebookId))
+            return ApiErrors.NotFound(this, "notebook.not_found", "Notebook not found");
 
         var sources = await db.Sources
             .Where(s => s.NotebookId == notebookId && s.UserId == UserId)
@@ -101,8 +93,8 @@ public class SourcesController(
         if (file.Length > MaxUploadBytes)
             return BadRequest(new { error = $"File exceeds upload limit of {MaxUploadBytes} bytes." });
 
-        var nb = await db.Notebooks.FirstOrDefaultAsync(n => n.Id == notebookId && n.UserId == UserId);
-        if (nb is null) return NotFound(new { error = "Notebook not found" });
+        if (!await ownership.NotebookExistsAsync(notebookId))
+            return ApiErrors.NotFound(this, "notebook.not_found", "Notebook not found");
 
         // SEC-01: sanitize filename — strip path separators and null bytes
         var safeFileName = Path.GetFileName(file.FileName)
@@ -290,7 +282,7 @@ public class SourcesController(
     [HttpGet("{id}/ingestion-job")]
     public async Task<IActionResult> GetIngestionJob(string notebookId, string id)
     {
-        if (!await db.Sources.AnyAsync(s => s.Id == id && s.NotebookId == notebookId && s.UserId == UserId))
+        if (!await ownership.SourceExistsAsync(notebookId, id))
             return NotFound();
 
         var job = await db.IngestionJobs

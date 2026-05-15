@@ -1,28 +1,31 @@
 using System.Net.Http.Json;
+using System.Text.Json;
+using System.Text.Json.Serialization;
 
 namespace BeServer.Services;
 
-public class RagClient(HttpClient http, IConfiguration config)
+public class RagClient(HttpClient http, IConfiguration config, IHttpContextAccessor httpContextAccessor)
 {
+    private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
     private string? InternalSecret =>
         string.IsNullOrWhiteSpace(config["RAG_INTERNAL_SECRET"])
             ? config["INTERNAL_SECRET"]
             : config["RAG_INTERNAL_SECRET"];
 
-    private void AddSecret(HttpRequestMessage req)
+    private void AddHeaders(HttpRequestMessage req)
     {
         if (!string.IsNullOrEmpty(InternalSecret))
             req.Headers.Add("X-Internal-Secret", InternalSecret);
+        var correlationId = httpContextAccessor.HttpContext?.TraceIdentifier;
+        if (!string.IsNullOrWhiteSpace(correlationId))
+            req.Headers.Add("X-Correlation-Id", correlationId);
     }
 
     public async Task IngestAsync(string sourceId, string notebookId, string filePath, string mimeType)
     {
         var payload = new { source_id = sourceId, notebook_id = notebookId, file_path = filePath, mime_type = mimeType };
-        var req = new HttpRequestMessage(HttpMethod.Post, "/ingest")
-        {
-            Content = JsonContent.Create(payload)
-        };
-        AddSecret(req);
+        var req = new HttpRequestMessage(HttpMethod.Post, "/ingest") { Content = JsonContent.Create(payload) };
+        AddHeaders(req);
         var response = await http.SendAsync(req);
         response.EnsureSuccessStatusCode();
     }
@@ -30,75 +33,81 @@ public class RagClient(HttpClient http, IConfiguration config)
     public async Task DeleteAsync(string sourceId)
     {
         var req = new HttpRequestMessage(HttpMethod.Delete, $"/documents/{sourceId}");
-        AddSecret(req);
+        AddHeaders(req);
         var response = await http.SendAsync(req);
         if (!response.IsSuccessStatusCode && response.StatusCode != System.Net.HttpStatusCode.NotFound)
             response.EnsureSuccessStatusCode();
     }
 
-    public async Task<string> SearchAsync(string query, string notebookId, string mode, int topK)
-    {
-        var url = $"/search/{mode}?q={Uri.EscapeDataString(query)}&notebook_id={notebookId}&top_k={topK}";
-        var req = new HttpRequestMessage(HttpMethod.Get, url);
-        AddSecret(req);
-        var response = await http.SendAsync(req);
-        response.EnsureSuccessStatusCode();
-        return await response.Content.ReadAsStringAsync();
-    }
+    public Task<RagSearchResponse> SearchAsync(string query, string notebookId, string mode, int topK) =>
+        GetAsync<RagSearchResponse>($"/search/{mode}?q={Uri.EscapeDataString(query)}&notebook_id={notebookId}&top_k={topK}");
 
-    public async Task<string> BenchmarkAsync(string query, string notebookId, int topK)
-    {
-        var url = $"/search/benchmark?q={Uri.EscapeDataString(query)}&notebook_id={notebookId}&top_k={topK}";
-        var req = new HttpRequestMessage(HttpMethod.Get, url);
-        AddSecret(req);
-        var response = await http.SendAsync(req);
-        response.EnsureSuccessStatusCode();
-        return await response.Content.ReadAsStringAsync();
-    }
+    public Task<RagBenchmarkResponse> BenchmarkAsync(string query, string notebookId, int topK) =>
+        GetAsync<RagBenchmarkResponse>($"/search/benchmark?q={Uri.EscapeDataString(query)}&notebook_id={notebookId}&top_k={topK}");
 
-    public async Task<string> RunExperimentAsync(string notebookId, ExperimentRunRequest req)
+    public async Task<RagExperimentRecord> RunExperimentAsync(string notebookId, ExperimentRunRequest req)
     {
-        var config = req.Config ?? new ExperimentConfig(["vector", "bm25", "hybrid"]);
+        var experimentConfig = req.Config ?? new ExperimentConfig(["vector", "bm25", "hybrid"]);
         var payload = new
         {
             notebook_id = notebookId,
             name = req.Name,
             queries = req.Queries,
-            config = new
-            {
-                modes = config.Modes,
-                top_k = config.TopK,
-                alpha = config.Alpha,
-            },
+            config = new { modes = experimentConfig.Modes, top_k = experimentConfig.TopK, alpha = experimentConfig.Alpha },
         };
-        var msg = new HttpRequestMessage(HttpMethod.Post, "/experiments/run")
-        {
-            Content = JsonContent.Create(payload)
-        };
-        AddSecret(msg);
+        var msg = new HttpRequestMessage(HttpMethod.Post, "/experiments/run") { Content = JsonContent.Create(payload) };
+        AddHeaders(msg);
         var response = await http.SendAsync(msg);
         response.EnsureSuccessStatusCode();
-        return await response.Content.ReadAsStringAsync();
+        return await ReadAsync<RagExperimentRecord>(response);
     }
 
-    public async Task<string> ListExperimentsAsync(string notebookId, int limit)
+    public Task<List<RagExperimentRecord>> ListExperimentsAsync(string notebookId, int limit) =>
+        GetAsync<List<RagExperimentRecord>>($"/experiments?notebook_id={notebookId}&limit={limit}");
+
+    public Task<RagExperimentRecord> GetExperimentAsync(string notebookId, string experimentId) =>
+        GetAsync<RagExperimentRecord>($"/experiments/{experimentId}?notebook_id={notebookId}");
+
+    private async Task<T> GetAsync<T>(string url)
     {
-        var msg = new HttpRequestMessage(HttpMethod.Get, $"/experiments?notebook_id={notebookId}&limit={limit}");
-        AddSecret(msg);
-        var response = await http.SendAsync(msg);
+        var req = new HttpRequestMessage(HttpMethod.Get, url);
+        AddHeaders(req);
+        var response = await http.SendAsync(req);
         response.EnsureSuccessStatusCode();
-        return await response.Content.ReadAsStringAsync();
+        return await ReadAsync<T>(response);
     }
 
-    public async Task<string> GetExperimentAsync(string notebookId, string experimentId)
-    {
-        var msg = new HttpRequestMessage(HttpMethod.Get, $"/experiments/{experimentId}?notebook_id={notebookId}");
-        AddSecret(msg);
-        var response = await http.SendAsync(msg);
-        response.EnsureSuccessStatusCode();
-        return await response.Content.ReadAsStringAsync();
-    }
+    private static async Task<T> ReadAsync<T>(HttpResponseMessage response) =>
+        await response.Content.ReadFromJsonAsync<T>(JsonOptions)
+        ?? throw new InvalidOperationException("RAG response body was empty.");
 }
 
+public record RagChunkResult(
+    [property: JsonPropertyName("source_id")] string SourceId,
+    [property: JsonPropertyName("chunk_index")] int ChunkIndex,
+    string Text);
+public record RagSearchResponse(List<RagChunkResult> Results);
+public record RagBenchmarkResponse(
+    string Query,
+    List<RagChunkResult> Vector,
+    List<RagChunkResult> Bm25,
+    List<RagChunkResult> Hybrid);
+public record RagExperimentResultItem(
+    [property: JsonPropertyName("source_id")] string SourceId,
+    [property: JsonPropertyName("chunk_index")] int ChunkIndex);
+public record RagExperimentQueryResult(
+    string Query,
+    string Mode,
+    [property: JsonPropertyName("latency_ms")] int LatencyMs,
+    [property: JsonPropertyName("result_count")] int ResultCount,
+    List<RagExperimentResultItem> Results);
+public record RagExperimentRecord(
+    string Id,
+    [property: JsonPropertyName("notebook_id")] string NotebookId,
+    string Name,
+    ExperimentConfig Config,
+    string[] Queries,
+    List<RagExperimentQueryResult> Results,
+    [property: JsonPropertyName("created_at")] string CreatedAt);
 public record ExperimentConfig(string[] Modes, int TopK = 5, double Alpha = 0.5);
 public record ExperimentRunRequest(string? Name, string[] Queries, ExperimentConfig? Config);

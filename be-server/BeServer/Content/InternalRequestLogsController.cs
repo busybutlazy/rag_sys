@@ -1,6 +1,7 @@
 using System.Text.Json;
 using BeServer.Data;
 using BeServer.Data.Entities;
+using BeServer.Services;
 using Microsoft.AspNetCore.Mvc;
 
 namespace BeServer.Content;
@@ -30,8 +31,8 @@ public class InternalRequestLogsController(AppDbContext db, IConfiguration confi
             Operation = string.IsNullOrWhiteSpace(req.Operation) ? "unknown" : req.Operation,
             Method = BlankToNull(req.Method),
             Url = BlankToNull(req.Url),
-            RequestJson = LimitJson(req.RequestJson),
-            ResponseJson = LimitJson(req.ResponseJson),
+            RequestJson = RequestLogSanitizer.Redact(LimitJson(req.RequestJson)),
+            ResponseJson = RequestLogSanitizer.Redact(LimitJson(req.ResponseJson)),
             StatusCode = req.StatusCode,
             DurationMs = req.DurationMs,
             Error = BlankToNull(req.Error),
