@@ -26,6 +26,12 @@ export default function NotebookNotesPanel({
   onSubmit,
   onDelete,
 }: Props) {
+  function confirmDelete(noteId: string, title?: string) {
+    if (window.confirm(`Delete "${title || 'Untitled'}"? This cannot be undone.`)) {
+      void onDelete(noteId)
+    }
+  }
+
   return (
     <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_20rem]">
       <section className="workspace-panel">
@@ -76,7 +82,7 @@ export default function NotebookNotesPanel({
                   </div>
                   <button
                     type="button"
-                    onClick={() => void onDelete(note.id)}
+                    onClick={() => confirmDelete(note.id, note.title)}
                     className="text-xs text-stone-400 transition hover:text-red-600"
                   >
                     Delete

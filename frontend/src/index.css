@@ -254,18 +254,18 @@
     padding: 1rem 0;
   }
 
-  /* Mirrors Re Loop's nav — vertical text, right border indicator */
+  /* Primary nav stays horizontal for faster scanning. */
   .shell-link {
     position: relative;
     display: inline-block;
-    width: 1.3rem;
-    padding: 1.1rem 1.9rem;
+    width: auto;
+    padding: 0.8rem 1rem;
     color: rgba(255, 255, 255, 0.55);
     font-size: 0.78rem;
     font-weight: 400;
     letter-spacing: 0.06em;
     line-height: 1.2;
-    writing-mode: vertical-rl;
+    writing-mode: horizontal-tb;
     text-decoration: none;
     transition: color 0.2s ease;
   }
@@ -273,15 +273,15 @@
   .shell-link::after {
     content: "";
     position: absolute;
-    top: 0;
-    right: 0.4rem;
-    bottom: 0;
-    width: 2px;
-    height: 100%;
+    right: 1rem;
+    bottom: 0.35rem;
+    left: 1rem;
+    width: auto;
+    height: 2px;
     background: #ffffff;
     opacity: 0;
-    transform: scaleY(0.3);
-    transform-origin: bottom;
+    transform: scaleX(0.3);
+    transform-origin: left;
     transition: opacity 0.28s ease, transform 0.28s ease;
     border-radius: 1px;
   }
@@ -289,7 +289,7 @@
   .shell-link:hover { color: rgba(255, 255, 255, 0.88); }
 
   .shell-link-active { color: #ffffff; }
-  .shell-link-active::after { opacity: 1; transform: scaleY(1); }
+  .shell-link-active::after { opacity: 1; transform: scaleX(1); }
 
   .shell-account {
     display: flex;
