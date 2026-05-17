@@ -336,28 +336,30 @@ Phase 9 was implemented on `phase-9-reliable-ingestion-jobs`. Source uploads now
 
 **Goal:** Prove that multi-user data boundaries hold across SQL, ArangoDB, files, and agent tools.
 
-- [ ] Add isolation tests for every user-scoped API:
-  - [ ] notebooks
-  - [ ] sources
-  - [ ] notes
-  - [ ] search
-  - [ ] chat sessions
-  - [ ] agent tools
-  - [ ] experiments
-- [ ] Ensure RAG chunks carry enough ownership metadata:
-  - [ ] source_id
-  - [ ] notebook_id
-  - [ ] user_id where practical
-- [ ] Add ArangoDB cleanup checks:
-  - [ ] deleting source removes chunks
-  - [ ] deleting notebook removes all related vector records
-  - [ ] deleting user removes all related vector records
-- [ ] Validate agent tool calls:
-  - [ ] tool calls must use active notebook unless explicitly allowed
-  - [ ] BE remains final authorization layer
-  - [ ] no direct user-provided notebook id bypass
+- [x] Add isolation tests for every user-scoped API:
+  - [x] notebooks
+  - [x] sources
+  - [x] notes
+  - [x] search
+  - [x] chat sessions
+  - [x] agent tools
+  - [x] experiments
+- [x] Ensure RAG chunks carry enough ownership metadata:
+  - [x] source_id
+  - [x] notebook_id
+  - [x] user_id where practical
+- [x] Add ArangoDB cleanup checks:
+  - [x] deleting source removes chunks
+  - [x] deleting notebook removes all related vector records
+  - [x] deleting user removes all related vector records
+- [x] Validate agent tool calls:
+  - [x] tool calls must use active notebook unless explicitly allowed
+  - [x] BE remains final authorization layer
+  - [x] no direct user-provided notebook id bypass
 
 **Deliverable:** Cross-user access attempts are covered by automated tests and fail consistently.
+
+**Current status (2026-05-17):** Implemented on `phase-14-multi-user-isolation`. BE now threads authenticated `user_id` into typed RAG calls; RAG documents, chunks, and experiments persist and filter owner scope; notebook archive triggers retrieval cleanup; helper paths exist for source, notebook, and user cleanup; and focused BE/RAG/agent regression tests cover cross-user boundaries and active-notebook tool restrictions.
 
 ---
 

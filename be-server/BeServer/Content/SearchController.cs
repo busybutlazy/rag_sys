@@ -7,7 +7,7 @@ namespace BeServer.Content;
 [ApiController]
 [Route("api/notebooks/{notebookId}/search")]
 [Authorize]
-public class SearchController(OwnershipService ownership, RagClient rag) : ControllerBase
+public class SearchController(OwnershipService ownership, RagClient rag, CurrentUserAccessor currentUser) : ControllerBase
 {
     private static readonly string[] ValidModes = ["vector", "bm25", "hybrid"];
 
@@ -25,7 +25,7 @@ public class SearchController(OwnershipService ownership, RagClient rag) : Contr
         if (!await ownership.NotebookExistsAsync(notebookId))
             return ApiErrors.NotFound(this, "notebook.not_found", "Notebook not found");
 
-        return Ok(await rag.SearchAsync(q, notebookId, mode, topK));
+        return Ok(await rag.SearchAsync(q, notebookId, currentUser.UserId, mode, topK));
     }
 
     [HttpGet("benchmark")]
@@ -39,6 +39,6 @@ public class SearchController(OwnershipService ownership, RagClient rag) : Contr
         if (!await ownership.NotebookExistsAsync(notebookId))
             return ApiErrors.NotFound(this, "notebook.not_found", "Notebook not found");
 
-        return Ok(await rag.BenchmarkAsync(q, notebookId, topK));
+        return Ok(await rag.BenchmarkAsync(q, notebookId, currentUser.UserId, topK));
     }
 }

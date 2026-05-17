@@ -21,36 +21,45 @@ public class RagClient(HttpClient http, IConfiguration config, IHttpContextAcces
             req.Headers.Add("X-Correlation-Id", correlationId);
     }
 
-    public async Task IngestAsync(string sourceId, string notebookId, string filePath, string mimeType)
+    public async Task IngestAsync(string sourceId, string notebookId, string userId, string filePath, string mimeType)
     {
-        var payload = new { source_id = sourceId, notebook_id = notebookId, file_path = filePath, mime_type = mimeType };
+        var payload = new { source_id = sourceId, notebook_id = notebookId, user_id = userId, file_path = filePath, mime_type = mimeType };
         var req = new HttpRequestMessage(HttpMethod.Post, "/ingest") { Content = JsonContent.Create(payload) };
         AddHeaders(req);
         var response = await http.SendAsync(req);
         response.EnsureSuccessStatusCode();
     }
 
-    public async Task DeleteAsync(string sourceId)
+    public async Task DeleteAsync(string sourceId, string userId)
     {
-        var req = new HttpRequestMessage(HttpMethod.Delete, $"/documents/{sourceId}");
+        var req = new HttpRequestMessage(HttpMethod.Delete, $"/documents/{sourceId}?user_id={userId}");
         AddHeaders(req);
         var response = await http.SendAsync(req);
         if (!response.IsSuccessStatusCode && response.StatusCode != System.Net.HttpStatusCode.NotFound)
             response.EnsureSuccessStatusCode();
     }
 
-    public Task<RagSearchResponse> SearchAsync(string query, string notebookId, string mode, int topK) =>
-        GetAsync<RagSearchResponse>($"/search/{mode}?q={Uri.EscapeDataString(query)}&notebook_id={notebookId}&top_k={topK}");
+    public async Task DeleteNotebookAsync(string notebookId, string userId)
+    {
+        var req = new HttpRequestMessage(HttpMethod.Delete, $"/notebooks/{notebookId}/documents?user_id={userId}");
+        AddHeaders(req);
+        var response = await http.SendAsync(req);
+        response.EnsureSuccessStatusCode();
+    }
 
-    public Task<RagBenchmarkResponse> BenchmarkAsync(string query, string notebookId, int topK) =>
-        GetAsync<RagBenchmarkResponse>($"/search/benchmark?q={Uri.EscapeDataString(query)}&notebook_id={notebookId}&top_k={topK}");
+    public Task<RagSearchResponse> SearchAsync(string query, string notebookId, string userId, string mode, int topK) =>
+        GetAsync<RagSearchResponse>($"/search/{mode}?q={Uri.EscapeDataString(query)}&notebook_id={notebookId}&user_id={userId}&top_k={topK}");
 
-    public async Task<RagExperimentRecord> RunExperimentAsync(string notebookId, ExperimentRunRequest req)
+    public Task<RagBenchmarkResponse> BenchmarkAsync(string query, string notebookId, string userId, int topK) =>
+        GetAsync<RagBenchmarkResponse>($"/search/benchmark?q={Uri.EscapeDataString(query)}&notebook_id={notebookId}&user_id={userId}&top_k={topK}");
+
+    public async Task<RagExperimentRecord> RunExperimentAsync(string notebookId, string userId, ExperimentRunRequest req)
     {
         var experimentConfig = req.Config ?? new ExperimentConfig(["vector", "bm25", "hybrid"]);
         var payload = new
         {
             notebook_id = notebookId,
+            user_id = userId,
             name = req.Name,
             queries = req.Queries,
             config = new { modes = experimentConfig.Modes, top_k = experimentConfig.TopK, alpha = experimentConfig.Alpha },
@@ -62,11 +71,11 @@ public class RagClient(HttpClient http, IConfiguration config, IHttpContextAcces
         return await ReadAsync<RagExperimentRecord>(response);
     }
 
-    public Task<List<RagExperimentRecord>> ListExperimentsAsync(string notebookId, int limit) =>
-        GetAsync<List<RagExperimentRecord>>($"/experiments?notebook_id={notebookId}&limit={limit}");
+    public Task<List<RagExperimentRecord>> ListExperimentsAsync(string notebookId, string userId, int limit) =>
+        GetAsync<List<RagExperimentRecord>>($"/experiments?notebook_id={notebookId}&user_id={userId}&limit={limit}");
 
-    public Task<RagExperimentRecord> GetExperimentAsync(string notebookId, string experimentId) =>
-        GetAsync<RagExperimentRecord>($"/experiments/{experimentId}?notebook_id={notebookId}");
+    public Task<RagExperimentRecord> GetExperimentAsync(string notebookId, string userId, string experimentId) =>
+        GetAsync<RagExperimentRecord>($"/experiments/{experimentId}?notebook_id={notebookId}&user_id={userId}");
 
     private async Task<T> GetAsync<T>(string url)
     {

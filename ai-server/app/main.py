@@ -54,7 +54,7 @@ async def health():
 @app.post("/chat/completions")
 async def chat_completions(
     req: ChatRequest,
-    _user_id: str = Depends(get_current_user),
+    user_id: str = Depends(get_current_user),
     x_correlation_id: str | None = Header(default=None),
 ):
     if req.model not in _ALLOWED_MODELS:
@@ -69,7 +69,7 @@ async def chat_completions(
             query = user_messages[-1].content
             started = time.perf_counter()
             try:
-                sources = await rag_client.search(query, req.notebook_id, correlation_id=x_correlation_id)
+                sources = await rag_client.search(query, req.notebook_id, user_id, correlation_id=x_correlation_id)
                 await be_client.log_request(
                     chat_request_id=req.request_id,
                     session_id=req.session_id,
@@ -237,7 +237,7 @@ async def session_state_update(
 @app.post("/agent/run")
 async def agent_run(
     req: AgentRunRequest,
-    _user_id: str = Depends(get_current_user),
+    user_id: str = Depends(get_current_user),
     authorization: str | None = Header(default=None),
     x_correlation_id: str | None = Header(default=None),
 ):
@@ -246,7 +246,7 @@ async def agent_run(
 
     async def event_stream():
         try:
-            async for event in stream_agent_events(req, authorization, x_correlation_id):
+            async for event in stream_agent_events(req, authorization, user_id, x_correlation_id):
                 yield f"data: {json.dumps(event, ensure_ascii=False)}\n\n"
         except Exception as exc:
             yield f"data: {json.dumps({'error': str(exc)})}\n\n"

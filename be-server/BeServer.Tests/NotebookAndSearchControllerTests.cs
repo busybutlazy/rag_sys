@@ -81,24 +81,21 @@ public class NotebookAndSearchControllerTests
     {
         var context = ControllerContextFor(userId);
         var accessor = new HttpContextAccessor { HttpContext = context.HttpContext };
-        var controller = new NotebooksController(db, new CurrentUserAccessor(accessor));
+        var config = TestConfig();
+        var rag = new RagClient(new HttpClient(new FakeHandler()) { BaseAddress = new Uri("http://rag-server") }, config, accessor);
+        var controller = new NotebooksController(db, new CurrentUserAccessor(accessor), rag);
         controller.ControllerContext = context;
         return controller;
     }
 
     private static SearchController CreateSearchController(AppDbContext db, string userId)
     {
-        var config = new ConfigurationBuilder()
-            .AddInMemoryCollection(new Dictionary<string, string?>
-            {
-                ["RAG_INTERNAL_SECRET"] = "this_is_a_long_test_secret_for_rag_boundary",
-            })
-            .Build();
+        var config = TestConfig();
         var context = ControllerContextFor(userId);
         var accessor = new HttpContextAccessor { HttpContext = context.HttpContext };
         var currentUser = new CurrentUserAccessor(accessor);
         var rag = new RagClient(new HttpClient(new FakeHandler()) { BaseAddress = new Uri("http://rag-server") }, config, accessor);
-        var controller = new SearchController(new OwnershipService(db, currentUser), rag);
+        var controller = new SearchController(new OwnershipService(db, currentUser), rag, currentUser);
         controller.ControllerContext = context;
         return controller;
     }
@@ -123,4 +120,12 @@ public class NotebookAndSearchControllerTests
                 Content = new StringContent("{\"results\":[]}"),
             });
     }
+
+    private static IConfiguration TestConfig() =>
+        new ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string?>
+            {
+                ["RAG_INTERNAL_SECRET"] = "this_is_a_long_test_secret_for_rag_boundary",
+            })
+            .Build();
 }

@@ -73,6 +73,7 @@ async def ingest(
         "_key": req.source_id,
         "source_id": req.source_id,
         "notebook_id": req.notebook_id,
+        "user_id": req.user_id,
         "file_path": req.file_path,
         "mime_type": req.mime_type,
         "status": "processing",
@@ -94,8 +95,8 @@ async def ingest(
 
         embeddings = await embedder.embed_batch(chunks)
 
-        vector_store.delete_chunks(db, req.source_id)
-        vector_store.store_chunks(db, req.source_id, req.notebook_id, chunks, embeddings)
+        vector_store.delete_chunks(db, req.source_id, req.user_id)
+        vector_store.store_chunks(db, req.source_id, req.notebook_id, req.user_id, chunks, embeddings)
 
         docs_col.update({
             "_key": req.source_id,
@@ -114,13 +115,14 @@ async def ingest(
 async def search_vector(
     q: str = Query(..., description="Query text"),
     notebook_id: str = Query(..., description="Notebook to search within"),
+    user_id: str = Query(..., description="Owner scope for the notebook"),
     top_k: int = Query(default=None, ge=1, le=20),
     x_internal_secret: str | None = Header(default=None),
 ):
     _check_secret(x_internal_secret)
     effective_top_k = top_k if top_k is not None else _cfg.top_k
     query_embedding = await embedder.embed(q)
-    results = vector_store.search_vector(get_db(), query_embedding, notebook_id, effective_top_k)
+    results = vector_store.search_vector(get_db(), query_embedding, notebook_id, user_id, effective_top_k)
     return SearchResponse(results=results)
 
 
@@ -128,12 +130,13 @@ async def search_vector(
 async def search_bm25_endpoint(
     q: str = Query(..., description="Query text"),
     notebook_id: str = Query(..., description="Notebook to search within"),
+    user_id: str = Query(..., description="Owner scope for the notebook"),
     top_k: int = Query(default=None, ge=1, le=20),
     x_internal_secret: str | None = Header(default=None),
 ):
     _check_secret(x_internal_secret)
     effective_top_k = top_k if top_k is not None else _cfg.top_k
-    results = vector_store.search_bm25(get_db(), q, notebook_id, effective_top_k)
+    results = vector_store.search_bm25(get_db(), q, notebook_id, user_id, effective_top_k)
     return SearchResponse(results=results)
 
 
@@ -141,6 +144,7 @@ async def search_bm25_endpoint(
 async def search_hybrid_endpoint(
     q: str = Query(..., description="Query text"),
     notebook_id: str = Query(..., description="Notebook to search within"),
+    user_id: str = Query(..., description="Owner scope for the notebook"),
     top_k: int = Query(default=None, ge=1, le=20),
     alpha: float = Query(default=None, ge=0.0, le=1.0, description="Vector weight (1-alpha goes to BM25)"),
     x_internal_secret: str | None = Header(default=None),
@@ -149,7 +153,7 @@ async def search_hybrid_endpoint(
     effective_top_k = top_k if top_k is not None else _cfg.top_k
     effective_alpha = alpha if alpha is not None else _cfg.hybrid_alpha
     query_embedding = await embedder.embed(q)
-    results = vector_store.search_hybrid(get_db(), query_embedding, q, notebook_id, effective_top_k, effective_alpha)
+    results = vector_store.search_hybrid(get_db(), query_embedding, q, notebook_id, user_id, effective_top_k, effective_alpha)
     return SearchResponse(results=results)
 
 
@@ -157,6 +161,7 @@ async def search_hybrid_endpoint(
 async def search_benchmark(
     q: str = Query(..., description="Query text"),
     notebook_id: str = Query(..., description="Notebook to search within"),
+    user_id: str = Query(..., description="Owner scope for the notebook"),
     top_k: int = Query(default=None, ge=1, le=20),
     x_internal_secret: str | None = Header(default=None),
 ):
@@ -164,9 +169,9 @@ async def search_benchmark(
     effective_top_k = top_k if top_k is not None else _cfg.top_k
     query_embedding = await embedder.embed(q)
     db = get_db()
-    vec_results = vector_store.search_vector(db, query_embedding, notebook_id, effective_top_k)
-    bm25_results = vector_store.search_bm25(db, q, notebook_id, effective_top_k)
-    hybrid_results = vector_store.search_hybrid(db, query_embedding, q, notebook_id, effective_top_k)
+    vec_results = vector_store.search_vector(db, query_embedding, notebook_id, user_id, effective_top_k)
+    bm25_results = vector_store.search_bm25(db, q, notebook_id, user_id, effective_top_k)
+    hybrid_results = vector_store.search_hybrid(db, query_embedding, q, notebook_id, user_id, effective_top_k)
     return BenchmarkResponse(
         query=q,
         vector=vec_results,
@@ -178,25 +183,38 @@ async def search_benchmark(
 @app.delete("/documents/{source_id}", status_code=204)
 async def delete_document(
     source_id: str,
+    user_id: str = Query(..., description="Owner scope for the source"),
     x_internal_secret: str | None = Header(default=None),
 ):
     _check_secret(x_internal_secret)
     db = get_db()
-    vector_store.delete_chunks(db, source_id)
+    vector_store.delete_chunks(db, source_id, user_id)
     docs_col = db.collection("documents")
-    if docs_col.has(source_id):
+    doc = docs_col.get(source_id)
+    if doc and doc.get("user_id") == user_id:
         docs_col.delete(source_id)
+
+
+@app.delete("/notebooks/{notebook_id}/documents", status_code=204)
+async def delete_notebook_documents(
+    notebook_id: str,
+    user_id: str = Query(..., description="Owner scope for the notebook"),
+    x_internal_secret: str | None = Header(default=None),
+):
+    _check_secret(x_internal_secret)
+    vector_store.delete_notebook_payload(get_db(), notebook_id, user_id)
 
 
 @app.get("/documents/{source_id}/content", response_model=SourceContentResponse)
 async def get_document_content(
     source_id: str,
     notebook_id: str = Query(..., description="Notebook scope for the source"),
+    user_id: str = Query(..., description="Owner scope for the source"),
     max_chars: int = Query(default=12000, ge=1000, le=50000),
     x_internal_secret: str | None = Header(default=None),
 ):
     _check_secret(x_internal_secret)
-    content = vector_store.get_source_content(get_db(), source_id, notebook_id, max_chars)
+    content = vector_store.get_source_content(get_db(), source_id, notebook_id, user_id, max_chars)
     if not content["chunks"]:
         raise HTTPException(status_code=404, detail="Source content not found")
     return SourceContentResponse(**content)
@@ -218,21 +236,23 @@ async def run_experiment(
 @app.get("/experiments", response_model=list[ExperimentRecord])
 async def list_experiments(
     notebook_id: str = Query(...),
+    user_id: str = Query(...),
     limit: int = Query(default=20, ge=1, le=100),
     x_internal_secret: str | None = Header(default=None),
 ):
     _check_secret(x_internal_secret)
-    return [experiments.validate_record(r) for r in experiments.list_experiments(get_db(), notebook_id, limit)]
+    return [experiments.validate_record(r) for r in experiments.list_experiments(get_db(), notebook_id, user_id, limit)]
 
 
 @app.get("/experiments/{experiment_id}", response_model=ExperimentRecord)
 async def get_experiment(
     experiment_id: str,
     notebook_id: str = Query(...),
+    user_id: str = Query(...),
     x_internal_secret: str | None = Header(default=None),
 ):
     _check_secret(x_internal_secret)
-    record = experiments.get_experiment(get_db(), experiment_id, notebook_id)
+    record = experiments.get_experiment(get_db(), experiment_id, notebook_id, user_id)
     if record is None:
         raise HTTPException(status_code=404, detail="Experiment not found")
     return experiments.validate_record(record)

@@ -4,6 +4,7 @@ from pydantic import BaseModel, Field
 class IngestRequest(BaseModel):
     source_id: str
     notebook_id: str
+    user_id: str
     file_path: str
     mime_type: str
 
@@ -41,6 +42,7 @@ class ExperimentConfig(BaseModel):
 
 class ExperimentRunRequest(BaseModel):
     notebook_id: str
+    user_id: str
     name: str | None = None
     queries: list[str]
     config: ExperimentConfig = Field(default_factory=ExperimentConfig)

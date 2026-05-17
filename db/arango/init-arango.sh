@@ -64,7 +64,7 @@ done
 
 # ── 4. ArangoSearch view ───────────────────────────────────────
 echo "[arango-init] Creating search view..."
-VIEW_BODY="{\"name\":\"chunks_view\",\"type\":\"arangosearch\",\"links\":{\"chunks\":{\"fields\":{\"text\":{\"analyzers\":[\"text_en\"]},\"notebook_id\":{\"analyzers\":[\"identity\"]},\"source_id\":{\"analyzers\":[\"identity\"]},\"chunk_index\":{}}}}}"
+VIEW_BODY="{\"name\":\"chunks_view\",\"type\":\"arangosearch\",\"links\":{\"chunks\":{\"fields\":{\"text\":{\"analyzers\":[\"text_en\"]},\"notebook_id\":{\"analyzers\":[\"identity\"]},\"user_id\":{\"analyzers\":[\"identity\"]},\"source_id\":{\"analyzers\":[\"identity\"]},\"chunk_index\":{}}}}}"
 STATUS=$(check -u "${USER_AUTH}" \
     -X POST -H "Content-Type: application/json" \
     -d "${VIEW_BODY}" \

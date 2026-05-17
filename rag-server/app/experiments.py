@@ -30,11 +30,11 @@ async def run_experiment(db, req: ExperimentRunRequest) -> dict:
         for mode in modes:
             start = time.perf_counter()
             if mode == "vector":
-                docs = vector_store.search_vector(db, query_embedding, req.notebook_id, top_k)
+                docs = vector_store.search_vector(db, query_embedding, req.notebook_id, req.user_id, top_k)
             elif mode == "bm25":
-                docs = vector_store.search_bm25(db, query, req.notebook_id, top_k)
+                docs = vector_store.search_bm25(db, query, req.notebook_id, req.user_id, top_k)
             else:
-                docs = vector_store.search_hybrid(db, query_embedding, query, req.notebook_id, top_k, alpha)
+                docs = vector_store.search_hybrid(db, query_embedding, query, req.notebook_id, req.user_id, top_k, alpha)
             latency_ms = int((time.perf_counter() - start) * 1000)
             results.append({
                 "query": query,
@@ -51,6 +51,7 @@ async def run_experiment(db, req: ExperimentRunRequest) -> dict:
     record = {
         "_key": uuid.uuid4().hex,
         "notebook_id": req.notebook_id,
+        "user_id": req.user_id,
         "name": req.name or f"Experiment {now}",
         "config": {"modes": modes, "top_k": top_k, "alpha": alpha},
         "queries": queries,
@@ -61,23 +62,24 @@ async def run_experiment(db, req: ExperimentRunRequest) -> dict:
     return _public(record)
 
 
-def list_experiments(db, notebook_id: str, limit: int = 20) -> list[dict]:
+def list_experiments(db, notebook_id: str, user_id: str, limit: int = 20) -> list[dict]:
     cursor = db.aql.execute(
         """
         FOR doc IN experiments
           FILTER doc.notebook_id == @notebook_id
+            AND doc.user_id == @user_id
           SORT doc.created_at DESC
           LIMIT @limit
           RETURN doc
         """,
-        bind_vars={"notebook_id": notebook_id, "limit": limit},
+        bind_vars={"notebook_id": notebook_id, "user_id": user_id, "limit": limit},
     )
     return [_public(doc) for doc in cursor]
 
 
-def get_experiment(db, experiment_id: str, notebook_id: str) -> dict | None:
+def get_experiment(db, experiment_id: str, notebook_id: str, user_id: str) -> dict | None:
     doc = db.collection("experiments").get(experiment_id)
-    if not doc or doc.get("notebook_id") != notebook_id:
+    if not doc or doc.get("notebook_id") != notebook_id or doc.get("user_id") != user_id:
         return None
     return _public(doc)
 

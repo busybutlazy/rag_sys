@@ -74,6 +74,7 @@ _TOOLS: list[dict[str, Any]] = [
 async def stream_agent_events(
     req: AgentRunRequest,
     authorization: str | None,
+    user_id: str,
     correlation_id: str | None = None,
 ) -> AsyncGenerator[dict[str, Any], None]:
     messages: list[dict[str, Any]] = [
@@ -136,7 +137,7 @@ async def stream_agent_events(
             }
             try:
                 tool_started = time.perf_counter()
-                result = await _run_tool(name, args, req.notebook_id, authorization, correlation_id)
+                result = await _run_tool(name, args, req.notebook_id, user_id, authorization, correlation_id)
                 ok = True
             except Exception as exc:
                 result = {"error": str(exc)}
@@ -217,6 +218,7 @@ async def _run_tool(
     name: str,
     args: dict[str, Any],
     active_notebook_id: str | None,
+    user_id: str,
     authorization: str | None,
     correlation_id: str | None = None,
 ) -> Any:
@@ -227,13 +229,13 @@ async def _run_tool(
         notebook_id = _require_notebook(active_notebook_id)
         query = _require_string(args, "query")
         top_k = _bounded_int(args.get("top_k", 5), 1, 10)
-        return await rag_client.search(query, notebook_id, top_k, correlation_id)
+        return await rag_client.search(query, notebook_id, user_id, top_k, correlation_id)
 
     if name == "get_source_content":
         notebook_id = _require_notebook(active_notebook_id)
         source_id = _require_string(args, "source_id")
         max_chars = _bounded_int(args.get("max_chars", 12000), 1000, 50000)
-        return await rag_client.get_source_content(source_id, notebook_id, max_chars, correlation_id)
+        return await rag_client.get_source_content(source_id, notebook_id, user_id, max_chars, correlation_id)
 
     if name == "create_note":
         notebook_id = args.get("notebook_id") or active_notebook_id

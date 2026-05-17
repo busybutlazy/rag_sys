@@ -10,7 +10,7 @@ namespace BeServer.Content;
 [ApiController]
 [Route("api/notebooks")]
 [Authorize]
-public class NotebooksController(AppDbContext db, CurrentUserAccessor currentUser) : ControllerBase
+public class NotebooksController(AppDbContext db, CurrentUserAccessor currentUser, RagClient rag) : ControllerBase
 {
     private string UserId => currentUser.UserId;
 
@@ -85,6 +85,7 @@ public class NotebooksController(AppDbContext db, CurrentUserAccessor currentUse
     {
         var nb = await db.Notebooks.FirstOrDefaultAsync(n => n.Id == id && n.UserId == UserId);
         if (nb is null) return NotFound();
+        await rag.DeleteNotebookAsync(nb.Id, UserId);
         nb.Archived = true;
         nb.UpdatedAt = DateTime.UtcNow;
         await db.SaveChangesAsync();
