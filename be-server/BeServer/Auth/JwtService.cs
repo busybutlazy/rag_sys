@@ -21,7 +21,7 @@ public class JwtService(IConfiguration config)
         return secret;
     }
 
-    public string GenerateAccessToken(string userId, string username)
+    public string GenerateAccessToken(string userId, string username, bool isDevAdmin = false)
     {
         var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(_secret));
         var creds = new SigningCredentials(key, SecurityAlgorithms.HmacSha256);
@@ -30,6 +30,7 @@ public class JwtService(IConfiguration config)
         {
             new Claim(JwtRegisteredClaimNames.Sub, userId),
             new Claim(JwtRegisteredClaimNames.UniqueName, username),
+            new Claim("dev_admin", isDevAdmin ? "true" : "false"),
             new Claim(JwtRegisteredClaimNames.Jti, Guid.NewGuid().ToString()),
         };
 

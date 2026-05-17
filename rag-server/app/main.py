@@ -75,11 +75,12 @@ async def ingest(
     db = get_db()
     docs_col = db.collection("documents")
 
+    retrieval = req.retrieval
     ingestion_config = {
-        "chunk_size": _cfg.chunk_size,
-        "chunk_overlap": _cfg.chunk_overlap,
-        "embedding_model": _cfg.embedding_model,
-        "embedding_dimensions": _cfg.embedding_dimensions,
+        "chunk_size": retrieval.chunk_size if retrieval else _cfg.chunk_size,
+        "chunk_overlap": retrieval.chunk_overlap if retrieval else _cfg.chunk_overlap,
+        "embedding_model": retrieval.embedding_model if retrieval else _cfg.embedding_model,
+        "embedding_dimensions": retrieval.embedding_dimensions if retrieval else _cfg.embedding_dimensions,
     }
 
     doc_record = {
@@ -87,6 +88,7 @@ async def ingest(
         "source_id": req.source_id,
         "notebook_id": req.notebook_id,
         "user_id": req.user_id,
+        "retrieval_version_id": retrieval.retrieval_version_id if retrieval else None,
         "file_path": req.file_path,
         "mime_type": req.mime_type,
         "status": "processing",
@@ -102,14 +104,24 @@ async def ingest(
             asyncio.to_thread(chunker.extract_text, req.file_path, req.mime_type),
             timeout=float(os.environ.get("PARSER_TIMEOUT_SECONDS", "30")),
         )
-        chunks = chunker.chunk_text(text, _cfg.chunk_size, _cfg.chunk_overlap)
+        chunks = chunker.chunk_text(text, ingestion_config["chunk_size"], ingestion_config["chunk_overlap"])
         if not chunks:
             raise ValueError("No text extracted from file")
 
         embeddings = await embedder.embed_batch(chunks)
 
         vector_store.delete_chunks(db, req.source_id, req.user_id)
-        vector_store.store_chunks(db, req.source_id, req.notebook_id, req.user_id, chunks, embeddings)
+        vector_store.store_chunks(
+            db,
+            req.source_id,
+            req.notebook_id,
+            req.user_id,
+            chunks,
+            embeddings,
+            retrieval.retrieval_version_id if retrieval else None,
+            ingestion_config["embedding_model"],
+            ingestion_config["embedding_dimensions"],
+        )
 
         docs_col.update({
             "_key": req.source_id,

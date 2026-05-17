@@ -7,6 +7,7 @@ public class Notebook
     public string Name { get; set; } = null!;
     public string? Description { get; set; }
     public bool Archived { get; set; } = false;
+    public string? ActiveRetrievalVersionId { get; set; }
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
     public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
 
@@ -14,4 +15,5 @@ public class Notebook
     public ICollection<Source> Sources { get; set; } = [];
     public ICollection<Note> Notes { get; set; } = [];
     public ICollection<ChatSession> ChatSessions { get; set; } = [];
+    public ICollection<NotebookRetrievalVersion> RetrievalVersions { get; set; } = [];
 }

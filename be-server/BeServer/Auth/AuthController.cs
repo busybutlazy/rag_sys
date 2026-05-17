@@ -25,7 +25,7 @@ public class AuthController(AppDbContext db, JwtService jwt, IWebHostEnvironment
         if (user is null || !BCrypt.Net.BCrypt.Verify(req.Password, hashToCheck))
             return Unauthorized(new { error = "Invalid credentials" });
 
-        var accessToken = jwt.GenerateAccessToken(user.Id, user.Username);
+        var accessToken = jwt.GenerateAccessToken(user.Id, user.Username, user.IsDevAdmin);
         var refreshToken = CreateRefreshToken(user.Id, Guid.NewGuid().ToString(), ClientIp());
         db.RefreshTokens.Add(refreshToken.Entity);
         await db.SaveChangesAsync();
@@ -77,7 +77,7 @@ public class AuthController(AppDbContext db, JwtService jwt, IWebHostEnvironment
         await db.SaveChangesAsync();
 
         SetRefreshCookie(replacement.RawToken);
-        var accessToken = jwt.GenerateAccessToken(stored.UserId, stored.User.Username);
+        var accessToken = jwt.GenerateAccessToken(stored.UserId, stored.User.Username, stored.User.IsDevAdmin);
         return Ok(new { accessToken, expiresIn = 900 });
     }
 

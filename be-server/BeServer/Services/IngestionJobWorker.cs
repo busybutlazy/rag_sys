@@ -77,13 +77,26 @@ public class IngestionJobWorker(
 
         try
         {
-            await rag.IngestAsync(source.Id, source.NotebookId, source.UserId, source.FilePath ?? "", source.MimeType ?? "application/octet-stream");
+            var retrievalVersion = source.ActiveRetrievalVersionId is null
+                ? null
+                : await db.NotebookRetrievalVersions.SingleOrDefaultAsync(v => v.Id == source.ActiveRetrievalVersionId, cancellationToken);
+            var retrieval = retrievalVersion is null ? null : new RagRetrievalConfig(
+                retrievalVersion.Id,
+                retrievalVersion.ChunkSize,
+                retrievalVersion.ChunkOverlap,
+                retrievalVersion.EmbeddingModel,
+                retrievalVersion.EmbeddingDimensions,
+                retrievalVersion.DefaultSearchMode,
+                retrievalVersion.DefaultTopK,
+                retrievalVersion.DefaultHybridAlpha);
+            await rag.IngestAsync(source.Id, source.NotebookId, source.UserId, source.FilePath ?? "", source.MimeType ?? "application/octet-stream", retrieval);
 
             now = DateTime.UtcNow;
             job.Status = IngestionJobStatuses.Succeeded;
             job.CompletedAt = now;
             job.UpdatedAt = now;
             source.Status = SourceStatuses.Ingested;
+            source.LastIndexedRetrievalVersionId = source.ActiveRetrievalVersionId;
             source.UpdatedAt = now;
             await db.SaveChangesAsync(cancellationToken);
         }

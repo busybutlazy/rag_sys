@@ -10,7 +10,7 @@ namespace BeServer.Content;
 [ApiController]
 [Route("api/notebooks")]
 [Authorize]
-public class NotebooksController(AppDbContext db, CurrentUserAccessor currentUser, RagClient rag) : ControllerBase
+public class NotebooksController(AppDbContext db, CurrentUserAccessor currentUser, RagClient rag, RetrievalVersionService retrievalVersions) : ControllerBase
 {
     private string UserId => currentUser.UserId;
 
@@ -28,6 +28,8 @@ public class NotebooksController(AppDbContext db, CurrentUserAccessor currentUse
         var nb = new Notebook { UserId = UserId, Name = req.Name, Description = req.Description };
         db.Notebooks.Add(nb);
         await db.SaveChangesAsync();
+        await retrievalVersions.CreateInitialVersionAsync(nb, UserId);
+        await db.SaveChangesAsync();
         return CreatedAtAction(nameof(Get), new { id = nb.Id }, nb);
     }
 
@@ -44,6 +46,7 @@ public class NotebooksController(AppDbContext db, CurrentUserAccessor currentUse
                 n.Archived,
                 n.CreatedAt,
                 n.UpdatedAt,
+                n.ActiveRetrievalVersionId,
                 Sources = n.Sources.Select(s => new SourceDto(
                     s.Id,
                     s.Title,

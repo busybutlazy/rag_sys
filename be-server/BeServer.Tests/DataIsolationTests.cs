@@ -113,7 +113,7 @@ public class DataIsolationTests
         var context = ControllerContextFor(userId);
         var accessor = AccessorFor(context);
         var currentUser = new CurrentUserAccessor(accessor);
-        return new SearchController(new OwnershipService(db, currentUser), RagFor(accessor), currentUser)
+        return new SearchController(new OwnershipService(db, currentUser), RagFor(accessor), currentUser, db)
         { ControllerContext = context };
     }
 

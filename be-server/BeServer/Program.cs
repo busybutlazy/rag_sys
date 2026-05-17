@@ -61,7 +61,8 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
         };
     });
 
-builder.Services.AddAuthorization();
+builder.Services.AddAuthorization(options =>
+    options.AddPolicy("DevAdminOnly", policy => policy.RequireClaim("dev_admin", "true")));
 builder.Services.AddRateLimiter(options =>
 {
     options.AddFixedWindowLimiter("auth", limiter =>
@@ -83,6 +84,7 @@ builder.Services.AddHttpContextAccessor();
 builder.Services.AddScoped<CurrentUserAccessor>();
 builder.Services.AddScoped<OwnershipService>();
 builder.Services.AddScoped<ChatMessageService>();
+builder.Services.AddScoped<RetrievalVersionService>();
 builder.Services.AddSingleton<ModelRegistry>();
 builder.Services.AddSingleton<OperationalMetrics>();
 builder.Services.AddControllers();
@@ -195,6 +197,8 @@ static async Task MigrateAndSeedWithRetry(AppDbContext db, IConfiguration config
         {
             await db.Database.MigrateAsync();
             await SeedAdminUser(db, config);
+            await SeedRetrievalPresets(db);
+            await BackfillNotebookRetrievalVersions(db);
             return;
         }
         catch (Exception ex) when (attempt < maxAttempts)
@@ -214,16 +218,51 @@ static async Task SeedAdminUser(AppDbContext db, IConfiguration config)
 {
     var username = config["ADMIN_USERNAME"] ?? "admin";
     var password = config["ADMIN_PASSWORD"] ?? "changeme";
+    var existing = await db.Users.SingleOrDefaultAsync(u => u.Username == username);
 
-    if (!await db.Users.AnyAsync(u => u.Username == username))
+    if (existing is null)
     {
         db.Users.Add(new User
         {
             Username = username,
             PasswordHash = BCrypt.Net.BCrypt.HashPassword(password, workFactor: 12),
+            IsDevAdmin = true,
         });
         await db.SaveChangesAsync();
     }
+    else if (!existing.IsDevAdmin)
+    {
+        existing.IsDevAdmin = true;
+        existing.UpdatedAt = DateTime.UtcNow;
+        await db.SaveChangesAsync();
+    }
+}
+
+static async Task SeedRetrievalPresets(AppDbContext db)
+{
+    if (await db.RetrievalPresets.AnyAsync()) return;
+    db.RetrievalPresets.AddRange(
+        new RetrievalPreset { Key = "general", Name = "General", Description = "Balanced default", ChunkSize = 800, ChunkOverlap = 100, EmbeddingModel = "text-embedding-3-small", EmbeddingDimensions = 1536, DefaultSearchMode = "hybrid", DefaultTopK = 5, DefaultHybridAlpha = 0.5 },
+        new RetrievalPreset { Key = "longform", Name = "Longform", Description = "Larger chunks for prose", ChunkSize = 1200, ChunkOverlap = 160, EmbeddingModel = "text-embedding-3-small", EmbeddingDimensions = 1536, DefaultSearchMode = "hybrid", DefaultTopK = 5, DefaultHybridAlpha = 0.55 },
+        new RetrievalPreset { Key = "keyword-heavy", Name = "Keyword Heavy", Description = "Leans toward sparse retrieval", ChunkSize = 700, ChunkOverlap = 80, EmbeddingModel = "text-embedding-3-small", EmbeddingDimensions = 1536, DefaultSearchMode = "hybrid", DefaultTopK = 8, DefaultHybridAlpha = 0.3 },
+        new RetrievalPreset { Key = "transcript", Name = "Transcript", Description = "Shorter chunks for conversational text", ChunkSize = 500, ChunkOverlap = 80, EmbeddingModel = "text-embedding-3-small", EmbeddingDimensions = 1536, DefaultSearchMode = "hybrid", DefaultTopK = 6, DefaultHybridAlpha = 0.5 });
+    await db.SaveChangesAsync();
+}
+
+static async Task BackfillNotebookRetrievalVersions(AppDbContext db)
+{
+    var preset = await db.RetrievalPresets.SingleAsync(p => p.Key == "general");
+    var notebooks = await db.Notebooks.Where(n => n.ActiveRetrievalVersionId == null).ToListAsync();
+    foreach (var notebook in notebooks)
+    {
+        var version = RetrievalVersionService.FromPreset(notebook.Id, notebook.UserId, preset, "Backfilled initial notebook version");
+        db.NotebookRetrievalVersions.Add(version);
+        notebook.ActiveRetrievalVersionId = version.Id;
+        foreach (var source in await db.Sources.Where(s => s.NotebookId == notebook.Id && s.ActiveRetrievalVersionId == null).ToListAsync())
+            source.ActiveRetrievalVersionId = version.Id;
+    }
+    if (notebooks.Count > 0)
+        await db.SaveChangesAsync();
 }
 
 static void ValidateProductionSecrets(IConfiguration config, IWebHostEnvironment env)

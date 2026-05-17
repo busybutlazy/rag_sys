@@ -71,6 +71,9 @@ def store_chunks(
     user_id: str,
     chunks: list[str],
     embeddings: list[list[float]],
+    retrieval_version_id: str | None = None,
+    embedding_model: str | None = None,
+    embedding_dimensions: int | None = None,
 ) -> None:
     col = db.collection("chunks")
     docs = [
@@ -79,6 +82,9 @@ def store_chunks(
             "source_id": source_id,
             "notebook_id": notebook_id,
             "user_id": user_id,
+            "retrieval_version_id": retrieval_version_id,
+            "embedding_model": embedding_model,
+            "embedding_dimensions": embedding_dimensions,
             "chunk_index": i,
             "text": chunk,
             "embedding": embedding,
