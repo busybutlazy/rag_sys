@@ -10,6 +10,7 @@ import DashboardPage from './pages/DashboardPage'
 import NotebooksPage from './pages/NotebooksPage'
 import NotebookDetailPage from './pages/NotebookDetailPage'
 import LabRetrievalVersionsPage from './pages/LabRetrievalVersionsPage'
+import LabReindexPage from './pages/LabReindexPage'
 
 function ApiTokenBridge() {
   const { accessToken } = useAuthContext()
@@ -36,6 +37,7 @@ function AppRoutes() {
       <Route path="/notebooks" element={<ProtectedRoute><AppShell><NotebooksPage /></AppShell></ProtectedRoute>} />
       <Route path="/notebooks/:id" element={<ProtectedRoute><AppShell><NotebookDetailPage /></AppShell></ProtectedRoute>} />
       <Route path="/lab/retrieval-versions" element={<ProtectedRoute><AppShell><LabRetrievalVersionsPage /></AppShell></ProtectedRoute>} />
+      <Route path="/lab/reindex" element={<ProtectedRoute><AppShell><LabReindexPage /></AppShell></ProtectedRoute>} />
       <Route path="*" element={<Navigate to={accessToken ? '/dashboard' : '/login'} replace />} />
     </Routes>
   )

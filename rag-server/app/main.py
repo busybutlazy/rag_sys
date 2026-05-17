@@ -110,7 +110,10 @@ async def ingest(
 
         embeddings = await embedder.embed_batch(chunks)
 
-        vector_store.delete_chunks(db, req.source_id, req.user_id)
+        # When a retrieval version is specified, only remove chunks for that
+        # specific version so other versions' chunks are preserved across reindexes.
+        target_version_id = retrieval.retrieval_version_id if retrieval else None
+        vector_store.delete_chunks(db, req.source_id, req.user_id, target_version_id)
         vector_store.store_chunks(
             db,
             req.source_id,
@@ -118,7 +121,7 @@ async def ingest(
             req.user_id,
             chunks,
             embeddings,
-            retrieval.retrieval_version_id if retrieval else None,
+            target_version_id,
             ingestion_config["embedding_model"],
             ingestion_config["embedding_dimensions"],
         )
@@ -223,6 +226,17 @@ async def delete_document(
         docs_col.delete(source_id)
 
 
+@app.delete("/documents/{source_id}/chunks", status_code=204)
+async def delete_source_version_chunks(
+    source_id: str,
+    user_id: str = Query(..., description="Owner scope for the source"),
+    retrieval_version_id: str | None = Query(default=None, description="If set, only delete chunks for this version"),
+    x_internal_secret: str | None = Header(default=None),
+):
+    _check_secret(x_internal_secret)
+    vector_store.delete_chunks(get_db(), source_id, user_id, retrieval_version_id)
+
+
 @app.delete("/notebooks/{notebook_id}/documents", status_code=204)
 async def delete_notebook_documents(
     notebook_id: str,
@@ -231,6 +245,17 @@ async def delete_notebook_documents(
 ):
     _check_secret(x_internal_secret)
     vector_store.delete_notebook_payload(get_db(), notebook_id, user_id)
+
+
+@app.delete("/notebooks/{notebook_id}/chunks", status_code=204)
+async def delete_notebook_version_chunks(
+    notebook_id: str,
+    user_id: str = Query(..., description="Owner scope for the notebook"),
+    retrieval_version_id: str = Query(..., description="Delete chunks for this retrieval version only"),
+    x_internal_secret: str | None = Header(default=None),
+):
+    _check_secret(x_internal_secret)
+    vector_store.delete_version_chunks(get_db(), notebook_id, user_id, retrieval_version_id)
 
 
 @app.get("/documents/{source_id}/content", response_model=SourceContentResponse)

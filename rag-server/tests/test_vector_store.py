@@ -98,6 +98,32 @@ class VectorStoreTests(unittest.TestCase):
         fields = db.created_view["properties"]["links"]["chunks"]["fields"]
         self.assertIn("user_id", fields)
 
+    def test_delete_chunks_without_version_deletes_all_for_source(self):
+        db = FakeDb()
+
+        vector_store.delete_chunks(db, "src-1", "user-1")
+
+        self.assertIn("doc.source_id == @sid", db.aql.last_query)
+        self.assertNotIn("retrieval_version_id", db.aql.last_query)
+        self.assertEqual({"sid": "src-1", "uid": "user-1"}, db.aql.last_bind_vars)
+
+    def test_delete_chunks_with_version_scopes_to_that_version(self):
+        db = FakeDb()
+
+        vector_store.delete_chunks(db, "src-1", "user-1", retrieval_version_id="rv-42")
+
+        self.assertIn("doc.retrieval_version_id == @rv", db.aql.last_query)
+        self.assertEqual({"sid": "src-1", "uid": "user-1", "rv": "rv-42"}, db.aql.last_bind_vars)
+
+    def test_delete_version_chunks_filters_by_notebook_and_version(self):
+        db = FakeDb()
+
+        vector_store.delete_version_chunks(db, "nb-1", "user-1", "rv-99")
+
+        self.assertIn("doc.notebook_id == @nid", db.aql.last_query)
+        self.assertIn("doc.retrieval_version_id == @rv", db.aql.last_query)
+        self.assertEqual({"nid": "nb-1", "uid": "user-1", "rv": "rv-99"}, db.aql.last_bind_vars)
+
 
 if __name__ == "__main__":
     unittest.main()

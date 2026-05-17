@@ -238,6 +238,34 @@ namespace BeServer.Migrations
                 b.ToTable("SessionTasks");
             });
 
+            modelBuilder.Entity("BeServer.Data.Entities.ReindexJob", b =>
+            {
+                b.Property<string>("Id").HasMaxLength(36).HasColumnType("varchar(36)");
+                b.Property<int>("AttemptCount").HasColumnType("int");
+                b.Property<DateTime?>("CompletedAt").HasColumnType("datetime");
+                b.Property<DateTime>("CreatedAt").HasColumnType("datetime");
+                b.Property<string>("LastError").HasColumnType("text");
+                b.Property<int>("MaxAttempts").HasColumnType("int");
+                b.Property<string>("NotebookId").IsRequired().HasMaxLength(36).HasColumnType("varchar(36)");
+                b.Property<string>("PreviousRetrievalVersionId").HasMaxLength(36).HasColumnType("varchar(36)");
+                b.Property<string>("Scope").IsRequired().HasMaxLength(16).HasColumnType("varchar(16)");
+                b.Property<string>("SourceId").HasMaxLength(36).HasColumnType("varchar(36)");
+                b.Property<int>("SourcesFailed").HasColumnType("int");
+                b.Property<int>("SourcesSucceeded").HasColumnType("int");
+                b.Property<int>("SourcesTotal").HasColumnType("int");
+                b.Property<DateTime?>("StartedAt").HasColumnType("datetime");
+                b.Property<string>("Status").IsRequired().HasMaxLength(16).HasColumnType("varchar(16)");
+                b.Property<string>("TargetRetrievalVersionId").IsRequired().HasMaxLength(36).HasColumnType("varchar(36)");
+                b.Property<DateTime>("UpdatedAt").HasColumnType("datetime");
+                b.Property<DateTime>("AvailableAt").HasColumnType("datetime");
+                b.Property<string>("UserId").IsRequired().HasMaxLength(36).HasColumnType("varchar(36)");
+                b.HasKey("Id");
+                b.HasIndex("NotebookId");
+                b.HasIndex("Status", "AvailableAt");
+                b.HasIndex("UserId", "NotebookId");
+                b.ToTable("ReindexJobs");
+            });
+
             modelBuilder.Entity("BeServer.Data.Entities.Notebook", b =>
             {
                 b.HasOne("BeServer.Data.Entities.User", "User")
@@ -392,6 +420,22 @@ namespace BeServer.Migrations
                     .OnDelete(DeleteBehavior.Cascade)
                     .IsRequired();
                 b.Navigation("Session");
+            });
+
+            modelBuilder.Entity("BeServer.Data.Entities.ReindexJob", b =>
+            {
+                b.HasOne("BeServer.Data.Entities.Notebook", "Notebook")
+                    .WithMany()
+                    .HasForeignKey("NotebookId")
+                    .OnDelete(DeleteBehavior.Cascade)
+                    .IsRequired();
+                b.HasOne("BeServer.Data.Entities.User", "User")
+                    .WithMany()
+                    .HasForeignKey("UserId")
+                    .OnDelete(DeleteBehavior.Cascade)
+                    .IsRequired();
+                b.Navigation("Notebook");
+                b.Navigation("User");
             });
 
             modelBuilder.Entity("BeServer.Data.Entities.ChatRequest", b =>

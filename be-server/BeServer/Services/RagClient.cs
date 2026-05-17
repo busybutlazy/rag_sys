@@ -39,6 +39,26 @@ public class RagClient(HttpClient http, IConfiguration config, IHttpContextAcces
             response.EnsureSuccessStatusCode();
     }
 
+    public async Task DeleteSourceVersionChunksAsync(string sourceId, string userId, string? retrievalVersionId)
+    {
+        var url = string.IsNullOrEmpty(retrievalVersionId)
+            ? $"/documents/{sourceId}/chunks?user_id={userId}"
+            : $"/documents/{sourceId}/chunks?user_id={userId}&retrieval_version_id={Uri.EscapeDataString(retrievalVersionId)}";
+        var req = new HttpRequestMessage(HttpMethod.Delete, url);
+        AddHeaders(req);
+        var response = await http.SendAsync(req);
+        response.EnsureSuccessStatusCode();
+    }
+
+    public async Task DeleteNotebookVersionChunksAsync(string notebookId, string userId, string retrievalVersionId)
+    {
+        var req = new HttpRequestMessage(HttpMethod.Delete,
+            $"/notebooks/{notebookId}/chunks?user_id={userId}&retrieval_version_id={Uri.EscapeDataString(retrievalVersionId)}");
+        AddHeaders(req);
+        var response = await http.SendAsync(req);
+        response.EnsureSuccessStatusCode();
+    }
+
     public async Task DeleteNotebookAsync(string notebookId, string userId)
     {
         var req = new HttpRequestMessage(HttpMethod.Delete, $"/notebooks/{notebookId}/documents?user_id={userId}");
