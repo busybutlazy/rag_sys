@@ -1,9 +1,13 @@
+using BeServer.Data;
+using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Migrations;
 
 #nullable disable
 
 namespace BeServer.Migrations;
 
+[DbContext(typeof(AppDbContext))]
+[Migration("20260515010000_Phase10UploadSecurity")]
 public partial class Phase10UploadSecurity : Migration
 {
     protected override void Up(MigrationBuilder migrationBuilder)
