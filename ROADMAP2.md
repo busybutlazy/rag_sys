@@ -289,39 +289,41 @@ Phase 9 was implemented on `phase-9-reliable-ingestion-jobs`. Source uploads now
 
 **Goal:** Make model and retrieval changes configurable, testable, and reversible.
 
-- [ ] Add server-side model registry:
-  - [ ] `chat_default`
-  - [ ] `agent_default`
-  - [ ] `summary_default`
-  - [ ] allowed model list per environment
-  - [ ] max output/token/cost controls
-- [ ] Stop accepting arbitrary model names from frontend:
-  - [ ] Frontend sends a preset or mode.
-  - [ ] BE resolves preset to configured model.
-  - [ ] AI server validates model against allowlist.
-- [ ] Complete LLM gateway abstraction:
-  - [ ] Streaming chat completion.
-  - [ ] non-streaming structured output.
-  - [ ] embeddings or separate embedding gateway.
-  - [ ] provider-specific error normalization.
-- [ ] Make RAG config explicit:
-  - [ ] chunk size
-  - [ ] overlap
-  - [ ] embedding model
-  - [ ] embedding dimensions
-  - [ ] search mode
-  - [ ] top_k
-  - [ ] hybrid alpha
-- [ ] Store RAG config snapshot:
-  - [ ] on source ingestion
-  - [ ] on experiment run
-  - [ ] on chat request context snapshot
-- [ ] Add migration path for future retrieval versions:
-  - [ ] re-ingest by source
-  - [ ] re-embed by notebook
-  - [ ] compare retrieval versions in experiments
+- [x] Add server-side model registry:
+  - [x] `chat_default`
+  - [x] `agent_default`
+  - [x] `summary_default`
+  - [x] allowed model list per environment
+  - [ ] max output/token/cost controls — not implemented; deferred to a future operations phase
+- [x] Stop accepting arbitrary model names from frontend:
+  - [x] Frontend sends a preset or mode.
+  - [x] BE resolves preset to configured model.
+  - [x] AI server validates model against allowlist.
+- [x] Complete LLM gateway abstraction:
+  - [x] Streaming chat completion.
+  - [x] non-streaming structured output.
+  - [x] embeddings or separate embedding gateway.
+  - [x] provider-specific error normalization.
+- [x] Make RAG config explicit:
+  - [x] chunk size
+  - [x] overlap
+  - [x] embedding model
+  - [x] embedding dimensions
+  - [x] search mode
+  - [x] top_k
+  - [x] hybrid alpha
+- [x] Store RAG config snapshot:
+  - [x] on source ingestion
+  - [ ] on experiment run — experiment record stores requested config only, not system RagConfig snapshot; deferred
+  - [x] on chat request context snapshot (via `ContextSnapshotJson` + `RetrievalVersionId`; completed fully in Phase 16)
+- [x] Add migration path for future retrieval versions:
+  - [x] re-ingest by source (`POST /sources/{id}/reingest`)
+  - [ ] re-embed by notebook — deferred to Phase 17
+  - [ ] compare retrieval versions in experiments — deferred to Phase 18
 
 **Deliverable:** Model/RAG changes are made through config and versioned metadata, not scattered code edits.
+
+**Current status (2026-05-15):** Implemented on `phase-13-extensibility-models-rag-config`. BE now has a `ModelRegistry` singleton that resolves frontend presets to allowlisted model names; `ChatSessionsController` and AI server validate against the registry. LLM gateway gains `complete_structured()` and typed `GatewayError` with retryable flag. RAG server gains an `EmbeddingGateway` ABC with an OpenAI implementation; `RagConfig` frozen dataclass captures all retrieval knobs at startup with validation. Ingestion stores a config snapshot in ArangoDB; a manual re-ingest endpoint (`POST /sources/{id}/reingest`) cancels active jobs and queues a fresh one. Three items remain deferred: per-model output/cost controls, RAG config snapshot on experiment runs, and notebook-level re-embed (Phase 17) and retrieval-version comparison in experiments (Phase 18).
 
 **Review references:**
 - `ai-server/app/gateway/openai_provider.py`
