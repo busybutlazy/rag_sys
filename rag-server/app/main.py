@@ -14,6 +14,7 @@ from app.models import (
 )
 from app.rag_config import current_config, validate_config
 from app import chunker, embedder, experiments, vector_store
+from app.metrics import metrics, observe_http
 
 configure_json_logging()
 
@@ -41,12 +42,23 @@ async def lifespan(_: FastAPI):
 
 
 app = FastAPI(title="RAG Server", version="0.1.0", lifespan=lifespan)
+app.middleware("http")(observe_http)
 
 
 @app.get("/health")
 async def health():
-    get_db().version()
     return {"status": "ok", "service": "rag-server"}
+
+
+@app.get("/ready")
+async def ready():
+    get_db().version()
+    return {"status": "ready", "service": "rag-server"}
+
+
+@app.get("/metrics")
+async def get_metrics():
+    return metrics.snapshot()
 
 
 @app.post("/ingest", status_code=200)
@@ -55,6 +67,7 @@ async def ingest(
     x_internal_secret: str | None = Header(default=None),
 ):
     _check_secret(x_internal_secret)
+    metrics.increment("ingest_requests")
 
     if not os.path.exists(req.file_path):
         raise HTTPException(status_code=404, detail=f"File not found: {req.file_path}")
@@ -120,6 +133,7 @@ async def search_vector(
     x_internal_secret: str | None = Header(default=None),
 ):
     _check_secret(x_internal_secret)
+    metrics.increment("search_vector")
     effective_top_k = top_k if top_k is not None else _cfg.top_k
     query_embedding = await embedder.embed(q)
     results = vector_store.search_vector(get_db(), query_embedding, notebook_id, user_id, effective_top_k)
@@ -135,6 +149,7 @@ async def search_bm25_endpoint(
     x_internal_secret: str | None = Header(default=None),
 ):
     _check_secret(x_internal_secret)
+    metrics.increment("search_bm25")
     effective_top_k = top_k if top_k is not None else _cfg.top_k
     results = vector_store.search_bm25(get_db(), q, notebook_id, user_id, effective_top_k)
     return SearchResponse(results=results)
@@ -150,6 +165,7 @@ async def search_hybrid_endpoint(
     x_internal_secret: str | None = Header(default=None),
 ):
     _check_secret(x_internal_secret)
+    metrics.increment("search_hybrid")
     effective_top_k = top_k if top_k is not None else _cfg.top_k
     effective_alpha = alpha if alpha is not None else _cfg.hybrid_alpha
     query_embedding = await embedder.embed(q)

@@ -125,6 +125,38 @@ app.UseAuthentication();
 app.UseAuthorization();
 
 app.MapGet("/health", () => Results.Ok(new { status = "ok", service = "be-server" }));
+app.MapGet("/ready", async (AppDbContext db) =>
+    await db.Database.CanConnectAsync()
+        ? Results.Ok(new { status = "ready", service = "be-server" })
+        : Results.StatusCode(StatusCodes.Status503ServiceUnavailable));
+app.MapGet("/metrics", async (AppDbContext db) =>
+{
+    var since = DateTime.UtcNow.AddMinutes(-5);
+    var requestCount = await db.RequestLogs.CountAsync(log => log.CreatedAt >= since);
+    var errorCount = await db.RequestLogs.CountAsync(log => log.CreatedAt >= since && log.Error != null);
+    var averageRequestDuration = await db.RequestLogs
+        .Where(log => log.CreatedAt >= since && log.DurationMs != null)
+        .AverageAsync(log => (double?)log.DurationMs) ?? 0;
+    var queueDepth = await db.IngestionJobs.CountAsync(job =>
+        job.JobType == IngestionJobTypes.Ingest &&
+        (job.Status == IngestionJobStatuses.Queued || job.Status == IngestionJobStatuses.Retrying));
+    var ingestionDurations = await db.IngestionJobs
+        .Where(job =>
+            job.JobType == IngestionJobTypes.Ingest &&
+            job.StartedAt != null &&
+            job.CompletedAt != null)
+        .Select(job => new { job.StartedAt, job.CompletedAt })
+        .ToListAsync();
+    var averageIngestionDuration = ingestionDurations.Count == 0
+        ? 0
+        : ingestionDurations.Average(job => (job.CompletedAt!.Value - job.StartedAt!.Value).TotalMilliseconds);
+    return Results.Ok(new
+    {
+        window_minutes = 5,
+        requests = new { count = requestCount, errors = errorCount, average_duration_ms = averageRequestDuration },
+        ingestion = new { queue_depth = queueDepth, average_duration_ms = averageIngestionDuration },
+    });
+});
 app.MapControllers();
 
 app.Run();
