@@ -20,6 +20,18 @@ Before Phase 18, BE resolved the active version's defaults but did not send the 
 
 **Resolution:** vector, BM25, hybrid, and benchmark search now accept retrieval-version scope; normal product search forwards the notebook's active version id.
 
+### 3. Historical run detail originally grouped duplicate query texts together
+
+Run-detail reconstruction initially grouped result rows by query text and mode. Two intentionally duplicated prompts in the same dataset would collapse into one logical comparison bucket, undermining replay fidelity.
+
+**Resolution:** run detail now groups by query id + query text + mode, so duplicate prompt text remains distinct when the curator meant it to be distinct.
+
+### 4. Run detail initially exposed tracked EF entities directly
+
+The first implementation returned `EvaluationResult` entities inside the run-detail DTO. In-memory tests exposed that serializing those objects can walk navigation properties into a cycle, which would make the endpoint fail under real JSON formatting.
+
+**Resolution:** run detail now projects stored results into a compact explicit DTO with parsed snapshots instead of returning tracked entities.
+
 ## Security
 
 - Positive: dataset and bench APIs remain behind `DevAdminOnly`.

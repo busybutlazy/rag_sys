@@ -202,7 +202,7 @@ public class LabRetrievalBenchController(
             .ToListAsync();
 
         var comparisons = results
-            .GroupBy(r => new { r.QueryTextSnapshot, r.Mode })
+            .GroupBy(r => new { r.QueryId, r.QueryTextSnapshot, r.Mode })
             .Select(g =>
             {
                 var left = g.Single(r => r.RetrievalVersionId == run.RetrievalVersionAId);
@@ -211,10 +211,11 @@ public class LabRetrievalBenchController(
                 var rightRows = ParseSnapshots(right.ResultsJson);
                 return new
                 {
+                    g.Key.QueryId,
                     g.Key.QueryTextSnapshot,
                     g.Key.Mode,
-                    VersionA = left,
-                    VersionB = right,
+                    VersionA = ToStoredResultDto(left),
+                    VersionB = ToStoredResultDto(right),
                     Metrics = comparison.Compare(
                         leftRows.Select(ToChunk).ToList(),
                         rightRows.Select(ToChunk).ToList(),
@@ -247,6 +248,19 @@ public class LabRetrievalBenchController(
 
     private static RagChunkResult ToChunk(RetrievalResultSnapshot s) =>
         new(s.SourceId, s.ChunkIndex, s.RetrievalVersionId, s.TextPreview);
+
+    private static object ToStoredResultDto(EvaluationResult r) => new
+    {
+        r.Id,
+        r.QueryId,
+        r.QueryTextSnapshot,
+        r.RetrievalVersionId,
+        r.Mode,
+        r.LatencyMs,
+        r.ResultCount,
+        Results = ParseSnapshots(r.ResultsJson),
+        r.CreatedAt,
+    };
 }
 
 public record RetrievalCompareRequest(

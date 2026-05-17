@@ -72,6 +72,32 @@ public class RetrievalBenchTests
         Assert.Equal(EvaluationRunStatuses.Succeeded, await db.EvaluationRuns.Select(r => r.Status).SingleAsync());
     }
 
+    [Fact]
+    public async Task RunDetail_KeepsDuplicateQueryTextsDistinct()
+    {
+        await using var db = CreateDb();
+        var user = await SeedUser(db);
+        var (notebook, a, b) = await SeedNotebookWithVersions(db, user.Id);
+        var dataset = new EvaluationDataset { NotebookId = notebook.Id, UserId = user.Id, Name = "Core" };
+        db.EvaluationDatasets.Add(dataset);
+        db.EvaluationQueries.AddRange(
+            new EvaluationQuery { DatasetId = dataset.Id, QueryText = "same", SortOrder = 0 },
+            new EvaluationQuery { DatasetId = dataset.Id, QueryText = "same", SortOrder = 1 });
+        await db.SaveChangesAsync();
+        var controller = CreateController(db, user.Id);
+        var created = Assert.IsType<CreatedAtActionResult>(await controller.RunDataset(
+            notebook.Id,
+            new EvaluationRunRequest(dataset.Id, a.Id, b.Id, ["hybrid"])));
+        var runId = await db.EvaluationRuns.Select(r => r.Id).SingleAsync();
+
+        var result = Assert.IsType<OkObjectResult>(await controller.GetRun(runId));
+        var json = JsonSerializer.Serialize(result.Value);
+        using var doc = JsonDocument.Parse(json);
+
+        Assert.Equal(2, doc.RootElement.GetProperty("Comparisons").GetArrayLength());
+        Assert.NotNull(created.Value);
+    }
+
     private static AppDbContext CreateDb() =>
         new(new DbContextOptionsBuilder<AppDbContext>().UseInMemoryDatabase(Guid.NewGuid().ToString()).Options);
 
