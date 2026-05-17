@@ -23,6 +23,12 @@ class FakeDb:
         self._collection.name = name
         return self._collection
 
+    def views(self):
+        return []
+
+    def create_view(self, **kwargs):
+        self.created_view = kwargs
+
 
 class FakeCollection:
     def __init__(self, indexes=None, document_count=1):
@@ -83,6 +89,14 @@ class VectorStoreTests(unittest.TestCase):
             {"nid": "nb-1", "uid": "user-1"},
             db.aql.last_bind_vars,
         )
+
+    def test_ensure_search_view_indexes_user_id(self):
+        db = FakeDb()
+
+        vector_store.ensure_search_view(db)
+
+        fields = db.created_view["properties"]["links"]["chunks"]["fields"]
+        self.assertIn("user_id", fields)
 
 
 if __name__ == "__main__":
