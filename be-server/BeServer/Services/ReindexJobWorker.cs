@@ -143,10 +143,6 @@ public class ReindexJobWorker(
         await rag.IngestAsync(source.Id, source.NotebookId, source.UserId,
             source.FilePath ?? "", source.MimeType ?? "application/octet-stream", retrieval);
 
-        // Remove previous version's chunks now that new ones are confirmed written.
-        if (!string.IsNullOrEmpty(job.PreviousRetrievalVersionId))
-            await rag.DeleteSourceVersionChunksAsync(source.Id, source.UserId, job.PreviousRetrievalVersionId);
-
         var now = DateTime.UtcNow;
         job.Status = ReindexJobStatuses.Succeeded;
         job.SourcesSucceeded = 1;
@@ -177,9 +173,6 @@ public class ReindexJobWorker(
             {
                 await rag.IngestAsync(source.Id, source.NotebookId, source.UserId,
                     source.FilePath ?? "", source.MimeType ?? "application/octet-stream", retrieval);
-
-                if (!string.IsNullOrEmpty(job.PreviousRetrievalVersionId))
-                    await rag.DeleteSourceVersionChunksAsync(source.Id, source.UserId, job.PreviousRetrievalVersionId);
 
                 now = DateTime.UtcNow;
                 source.LastIndexedRetrievalVersionId = job.TargetRetrievalVersionId;

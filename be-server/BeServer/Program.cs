@@ -85,6 +85,7 @@ builder.Services.AddScoped<CurrentUserAccessor>();
 builder.Services.AddScoped<OwnershipService>();
 builder.Services.AddScoped<ChatMessageService>();
 builder.Services.AddScoped<RetrievalVersionService>();
+builder.Services.AddScoped<RetrievalComparisonService>();
 builder.Services.AddSingleton<ModelRegistry>();
 builder.Services.AddSingleton<OperationalMetrics>();
 builder.Services.AddControllers();

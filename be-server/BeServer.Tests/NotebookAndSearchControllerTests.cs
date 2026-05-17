@@ -53,6 +53,32 @@ public class NotebookAndSearchControllerTests
         Assert.IsType<BadRequestObjectResult>(result);
     }
 
+    [Fact]
+    public async Task Search_PassesActiveRetrievalVersionToRag()
+    {
+        await using var db = CreateDb();
+        var user = await SeedUser(db, "user");
+        var notebook = await SeedNotebook(db, user.Id);
+        var version = new NotebookRetrievalVersion
+        {
+            NotebookId = notebook.Id,
+            CreatedByUserId = user.Id,
+            ChunkSize = 800,
+            ChunkOverlap = 100,
+            EmbeddingModel = "m",
+            EmbeddingDimensions = 3,
+        };
+        db.NotebookRetrievalVersions.Add(version);
+        notebook.ActiveRetrievalVersionId = version.Id;
+        await db.SaveChangesAsync();
+        var handler = new FakeHandler();
+        var controller = CreateSearchController(db, user.Id, handler);
+
+        await controller.Search(notebook.Id, "hello");
+
+        Assert.Contains($"retrieval_version_id={version.Id}", handler.LastRequestUri);
+    }
+
     private static AppDbContext CreateDb()
     {
         var options = new DbContextOptionsBuilder<AppDbContext>()
@@ -88,13 +114,13 @@ public class NotebookAndSearchControllerTests
         return controller;
     }
 
-    private static SearchController CreateSearchController(AppDbContext db, string userId)
+    private static SearchController CreateSearchController(AppDbContext db, string userId, FakeHandler? handler = null)
     {
         var config = TestConfig();
         var context = ControllerContextFor(userId);
         var accessor = new HttpContextAccessor { HttpContext = context.HttpContext };
         var currentUser = new CurrentUserAccessor(accessor);
-        var rag = new RagClient(new HttpClient(new FakeHandler()) { BaseAddress = new Uri("http://rag-server") }, config, accessor);
+        var rag = new RagClient(new HttpClient(handler ?? new FakeHandler()) { BaseAddress = new Uri("http://rag-server") }, config, accessor);
         var controller = new SearchController(new OwnershipService(db, currentUser), rag, currentUser, db);
         controller.ControllerContext = context;
         return controller;
@@ -114,11 +140,19 @@ public class NotebookAndSearchControllerTests
 
     private sealed class FakeHandler : HttpMessageHandler
     {
+        public string LastRequestUri { get; private set; } = "";
+
         protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken) =>
-            Task.FromResult(new HttpResponseMessage(System.Net.HttpStatusCode.OK)
+            Task.FromResult(BuildResponse(request));
+
+        private HttpResponseMessage BuildResponse(HttpRequestMessage request)
+        {
+            LastRequestUri = request.RequestUri?.ToString() ?? "";
+            return new HttpResponseMessage(System.Net.HttpStatusCode.OK)
             {
                 Content = new StringContent("{\"results\":[]}"),
-            });
+            };
+        }
     }
 
     private static IConfiguration TestConfig() =>

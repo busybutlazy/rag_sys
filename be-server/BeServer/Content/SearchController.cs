@@ -33,7 +33,7 @@ public class SearchController(OwnershipService ownership, RagClient rag, Current
         if (!await ownership.NotebookExistsAsync(notebookId))
             return ApiErrors.NotFound(this, "notebook.not_found", "Notebook not found");
 
-        return Ok(await rag.SearchAsync(q, notebookId, currentUser.UserId, effectiveMode, effectiveTopK));
+        return Ok(await rag.SearchAsync(q, notebookId, currentUser.UserId, effectiveMode, effectiveTopK, activeVersionId));
     }
 
     [HttpGet("benchmark")]
@@ -47,6 +47,11 @@ public class SearchController(OwnershipService ownership, RagClient rag, Current
         if (!await ownership.NotebookExistsAsync(notebookId))
             return ApiErrors.NotFound(this, "notebook.not_found", "Notebook not found");
 
-        return Ok(await rag.BenchmarkAsync(q, notebookId, currentUser.UserId, topK));
+        var activeVersionId = await db.Notebooks
+            .Where(n => n.Id == notebookId && n.UserId == currentUser.UserId)
+            .Select(n => n.ActiveRetrievalVersionId)
+            .SingleOrDefaultAsync();
+
+        return Ok(await rag.BenchmarkAsync(q, notebookId, currentUser.UserId, topK, activeVersionId));
     }
 }

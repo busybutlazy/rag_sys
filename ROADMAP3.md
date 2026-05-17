@@ -261,7 +261,7 @@ Reasoning: the Lab needs trustworthy ownership, versioning, and reproducibility 
   - [x] allow rollback / promotion
 - [x] Extend RAG payload:
   - [x] retrieval-version scoped chunks
-  - [ ] search by requested retrieval version — deferred to Phase 18 (needed for A/B comparison queries)
+  - [x] search by requested retrieval version — completed in Phase 18 for product pinning and Lab A/B queries
   - [x] cleanup stale version payloads only after safe promotion
 - [x] Add `/lab/reindex` UI:
   - [x] queue jobs
@@ -279,30 +279,32 @@ Reasoning: the Lab needs trustworthy ownership, versioning, and reproducibility 
 
 **Goal:** Compare retrieval versions on the same notebook and query set.
 
-- [ ] Add evaluation dataset model:
-  - [ ] named datasets
-  - [ ] notebook scope
-  - [ ] reusable query sets
-  - [ ] optional expected answer / gold source notes
-- [ ] Add evaluation run model:
-  - [ ] dataset id
-  - [ ] retrieval version A
-  - [ ] retrieval version B
-  - [ ] search mode set
-  - [ ] timestamps / actor
-- [ ] Add retrieval metrics:
-  - [ ] latency
-  - [ ] overlap@k
-  - [ ] source overlap
-  - [ ] rank deltas
-  - [ ] result-count deltas
-- [ ] Add `/lab/retrieval-bench` UI:
-  - [ ] ad hoc query compare
-  - [ ] dataset runner
-  - [ ] side-by-side chunk diff
-  - [ ] result history
+- [x] Add evaluation dataset model:
+  - [x] named datasets
+  - [x] notebook scope
+  - [x] reusable query sets
+  - [x] optional expected answer / gold source notes
+- [x] Add evaluation run model:
+  - [x] dataset id
+  - [x] retrieval version A
+  - [x] retrieval version B
+  - [x] search mode set
+  - [x] timestamps / actor
+- [x] Add retrieval metrics:
+  - [x] latency
+  - [x] overlap@k
+  - [x] source overlap
+  - [x] rank deltas
+  - [x] result-count deltas
+- [x] Add `/lab/retrieval-bench` UI:
+  - [x] ad hoc query compare
+  - [x] dataset runner
+  - [x] side-by-side chunk diff
+  - [x] result history
 
 **Deliverable:** The owner can answer, with evidence, whether one retrieval version beats another on their own corpus.
+
+**Current status (2026-05-17):** Implemented on `phase-18-retrieval-benchmarks-ab-comparison`. Retrieval search is now version-scoped, ordinary product search pins to the active notebook retrieval version, successful reindex keeps prior payloads for comparison, and inactive payloads can be pruned explicitly from Lab. The system now includes notebook-scoped evaluation datasets, immutable run/result snapshots, overlap and rank-delta metrics, ad hoc compare and dataset-run APIs, plus a first `/lab/retrieval-bench` UI with side-by-side inspection and run history.
 
 ---
 

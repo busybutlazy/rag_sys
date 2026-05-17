@@ -137,6 +137,24 @@ public class LabReindexController(
         return Ok(ToDto(job));
     }
 
+    [HttpDelete("notebooks/{notebookId}/retrieval-versions/{versionId}/payload")]
+    public async Task<IActionResult> PruneVersionPayload(string notebookId, string versionId, [FromServices] RagClient rag)
+    {
+        if (!await ownership.NotebookExistsAsync(notebookId))
+            return ApiErrors.NotFound(this, "notebook.not_found", "Notebook not found");
+
+        var notebook = await db.Notebooks.SingleAsync(n => n.Id == notebookId && n.UserId == UserId);
+        var version = await db.NotebookRetrievalVersions
+            .SingleOrDefaultAsync(v => v.Id == versionId && v.NotebookId == notebookId);
+        if (version is null)
+            return ApiErrors.NotFound(this, "retrieval.version_not_found", "Retrieval version not found");
+        if (notebook.ActiveRetrievalVersionId == versionId)
+            return ApiErrors.BadRequest(this, "retrieval.active_payload_not_prunable", "Active retrieval payload cannot be pruned.");
+
+        await rag.DeleteNotebookVersionChunksAsync(notebookId, UserId, versionId);
+        return NoContent();
+    }
+
     private static object ToDto(ReindexJob j) => new
     {
         j.Id,

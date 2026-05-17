@@ -58,6 +58,12 @@ export default function AppShell({ children }: AppShellProps) {
                   >
                     Lab · Re-indexing
                   </NavLink>
+                  <NavLink
+                    to="/lab/retrieval-bench"
+                    className={({ isActive }) => `shell-link ${isActive ? 'shell-link-active' : ''}`}
+                  >
+                    Lab · Retrieval Bench
+                  </NavLink>
                 </>
               )}
             </nav>

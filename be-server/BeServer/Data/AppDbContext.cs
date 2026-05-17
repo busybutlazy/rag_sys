@@ -19,6 +19,10 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
     public DbSet<RetrievalPreset> RetrievalPresets { get; set; } = null!;
     public DbSet<NotebookRetrievalVersion> NotebookRetrievalVersions { get; set; } = null!;
     public DbSet<ReindexJob> ReindexJobs { get; set; } = null!;
+    public DbSet<EvaluationDataset> EvaluationDatasets { get; set; } = null!;
+    public DbSet<EvaluationQuery> EvaluationQueries { get; set; } = null!;
+    public DbSet<EvaluationRun> EvaluationRuns { get; set; } = null!;
+    public DbSet<EvaluationResult> EvaluationResults { get; set; } = null!;
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -300,6 +304,71 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             e.HasIndex(j => j.NotebookId);
             e.HasIndex(j => new { j.Status, j.AvailableAt });
             e.HasIndex(j => new { j.UserId, j.NotebookId });
+        });
+
+        modelBuilder.Entity<EvaluationDataset>(e =>
+        {
+            e.HasKey(d => d.Id);
+            e.Property(d => d.Id).HasMaxLength(36);
+            e.Property(d => d.NotebookId).HasMaxLength(36).IsRequired();
+            e.Property(d => d.UserId).HasMaxLength(36).IsRequired();
+            e.Property(d => d.Name).HasMaxLength(160).IsRequired();
+            e.Property(d => d.Description).HasColumnType("text");
+            e.Property(d => d.CreatedAt).HasColumnType("datetime");
+            e.Property(d => d.UpdatedAt).HasColumnType("datetime");
+            e.HasOne(d => d.Notebook).WithMany().HasForeignKey(d => d.NotebookId).OnDelete(DeleteBehavior.Cascade);
+            e.HasOne(d => d.User).WithMany().HasForeignKey(d => d.UserId).OnDelete(DeleteBehavior.Cascade);
+            e.HasIndex(d => new { d.UserId, d.NotebookId });
+        });
+
+        modelBuilder.Entity<EvaluationQuery>(e =>
+        {
+            e.HasKey(q => q.Id);
+            e.Property(q => q.Id).HasMaxLength(36);
+            e.Property(q => q.DatasetId).HasMaxLength(36).IsRequired();
+            e.Property(q => q.QueryText).HasMaxLength(500).IsRequired();
+            e.Property(q => q.ExpectedAnswerNotes).HasColumnType("text");
+            e.Property(q => q.GoldSourceNotes).HasColumnType("text");
+            e.Property(q => q.CreatedAt).HasColumnType("datetime");
+            e.Property(q => q.UpdatedAt).HasColumnType("datetime");
+            e.HasOne(q => q.Dataset).WithMany(d => d.Queries).HasForeignKey(q => q.DatasetId).OnDelete(DeleteBehavior.Cascade);
+            e.HasIndex(q => new { q.DatasetId, q.SortOrder });
+        });
+
+        modelBuilder.Entity<EvaluationRun>(e =>
+        {
+            e.HasKey(r => r.Id);
+            e.Property(r => r.Id).HasMaxLength(36);
+            e.Property(r => r.NotebookId).HasMaxLength(36).IsRequired();
+            e.Property(r => r.DatasetId).HasMaxLength(36);
+            e.Property(r => r.UserId).HasMaxLength(36).IsRequired();
+            e.Property(r => r.RetrievalVersionAId).HasMaxLength(36).IsRequired();
+            e.Property(r => r.RetrievalVersionBId).HasMaxLength(36).IsRequired();
+            e.Property(r => r.SearchModesJson).HasColumnType("json");
+            e.Property(r => r.Status).HasMaxLength(16).IsRequired();
+            e.Property(r => r.StartedAt).HasColumnType("datetime");
+            e.Property(r => r.CompletedAt).HasColumnType("datetime");
+            e.Property(r => r.CreatedAt).HasColumnType("datetime");
+            e.HasOne(r => r.Notebook).WithMany().HasForeignKey(r => r.NotebookId).OnDelete(DeleteBehavior.Cascade);
+            e.HasOne(r => r.Dataset).WithMany().HasForeignKey(r => r.DatasetId).OnDelete(DeleteBehavior.SetNull);
+            e.HasOne(r => r.User).WithMany().HasForeignKey(r => r.UserId).OnDelete(DeleteBehavior.Cascade);
+            e.HasIndex(r => new { r.UserId, r.NotebookId, r.CreatedAt });
+        });
+
+        modelBuilder.Entity<EvaluationResult>(e =>
+        {
+            e.HasKey(r => r.Id);
+            e.Property(r => r.Id).HasMaxLength(36);
+            e.Property(r => r.RunId).HasMaxLength(36).IsRequired();
+            e.Property(r => r.QueryId).HasMaxLength(36);
+            e.Property(r => r.QueryTextSnapshot).HasMaxLength(500).IsRequired();
+            e.Property(r => r.RetrievalVersionId).HasMaxLength(36).IsRequired();
+            e.Property(r => r.Mode).HasMaxLength(16).IsRequired();
+            e.Property(r => r.ResultsJson).HasColumnType("json");
+            e.Property(r => r.CreatedAt).HasColumnType("datetime");
+            e.HasOne(r => r.Run).WithMany(run => run.Results).HasForeignKey(r => r.RunId).OnDelete(DeleteBehavior.Cascade);
+            e.HasOne(r => r.Query).WithMany().HasForeignKey(r => r.QueryId).OnDelete(DeleteBehavior.SetNull);
+            e.HasIndex(r => r.RunId);
         });
     }
 }
