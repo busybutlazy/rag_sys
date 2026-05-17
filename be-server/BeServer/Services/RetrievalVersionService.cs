@@ -8,7 +8,9 @@ public class RetrievalVersionService(AppDbContext db)
 {
     public async Task<NotebookRetrievalVersion> CreateInitialVersionAsync(Notebook notebook, string userId)
     {
-        var preset = await db.RetrievalPresets.SingleAsync(p => p.Key == "general");
+        var preset = await db.RetrievalPresets.FirstOrDefaultAsync(p => p.Key == "general")
+            ?? await db.RetrievalPresets.FirstOrDefaultAsync()
+            ?? throw new InvalidOperationException("No retrieval presets are seeded. Run the be-server seed step first.");
         var version = FromPreset(notebook.Id, userId, preset, notes: "Initial notebook version");
         db.NotebookRetrievalVersions.Add(version);
         notebook.ActiveRetrievalVersionId = version.Id;

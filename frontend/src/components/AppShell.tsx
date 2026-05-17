@@ -45,12 +45,20 @@ export default function AppShell({ children }: AppShellProps) {
                 Notebooks
               </NavLink>
               {isDevAdmin && (
-                <NavLink
-                  to="/lab/retrieval-versions"
-                  className={({ isActive }) => `shell-link ${isActive ? 'shell-link-active' : ''}`}
-                >
-                  Lab
-                </NavLink>
+                <>
+                  <NavLink
+                    to="/lab/retrieval-versions"
+                    className={({ isActive }) => `shell-link ${isActive ? 'shell-link-active' : ''}`}
+                  >
+                    Lab · Retrieval Versions
+                  </NavLink>
+                  <NavLink
+                    to="/lab/reindex"
+                    className={({ isActive }) => `shell-link ${isActive ? 'shell-link-active' : ''}`}
+                  >
+                    Lab · Re-indexing
+                  </NavLink>
+                </>
               )}
             </nav>
 

@@ -18,6 +18,7 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
     public DbSet<SessionTask> SessionTasks { get; set; } = null!;
     public DbSet<RetrievalPreset> RetrievalPresets { get; set; } = null!;
     public DbSet<NotebookRetrievalVersion> NotebookRetrievalVersions { get; set; } = null!;
+    public DbSet<ReindexJob> ReindexJobs { get; set; } = null!;
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -275,6 +276,30 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             e.HasIndex(v => v.NotebookId);
             e.HasIndex(v => v.ParentVersionId);
             e.HasIndex(v => v.OriginPresetId);
+        });
+
+        modelBuilder.Entity<ReindexJob>(e =>
+        {
+            e.HasKey(j => j.Id);
+            e.Property(j => j.Id).HasMaxLength(36);
+            e.Property(j => j.NotebookId).HasMaxLength(36).IsRequired();
+            e.Property(j => j.UserId).HasMaxLength(36).IsRequired();
+            e.Property(j => j.SourceId).HasMaxLength(36);
+            e.Property(j => j.Scope).HasMaxLength(16).IsRequired();
+            e.Property(j => j.TargetRetrievalVersionId).HasMaxLength(36).IsRequired();
+            e.Property(j => j.PreviousRetrievalVersionId).HasMaxLength(36);
+            e.Property(j => j.Status).HasMaxLength(16).IsRequired();
+            e.Property(j => j.LastError).HasColumnType("text");
+            e.Property(j => j.AvailableAt).HasColumnType("datetime");
+            e.Property(j => j.StartedAt).HasColumnType("datetime");
+            e.Property(j => j.CompletedAt).HasColumnType("datetime");
+            e.Property(j => j.CreatedAt).HasColumnType("datetime");
+            e.Property(j => j.UpdatedAt).HasColumnType("datetime");
+            e.HasOne(j => j.Notebook).WithMany().HasForeignKey(j => j.NotebookId).OnDelete(DeleteBehavior.Cascade);
+            e.HasOne(j => j.User).WithMany().HasForeignKey(j => j.UserId).OnDelete(DeleteBehavior.Cascade);
+            e.HasIndex(j => j.NotebookId);
+            e.HasIndex(j => new { j.Status, j.AvailableAt });
+            e.HasIndex(j => new { j.UserId, j.NotebookId });
         });
     }
 }

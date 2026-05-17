@@ -247,29 +247,31 @@ Reasoning: the Lab needs trustworthy ownership, versioning, and reproducibility 
 
 **Goal:** Safely rebuild source and notebook indexes when retrieval configuration changes.
 
-- [ ] Add durable re-index job model:
-  - [ ] source-level
-  - [ ] notebook-level
-  - [ ] re-ingest
-  - [ ] re-embed only where compatible
-  - [ ] queued / running / retrying / failed / succeeded / cancelled
-- [ ] Add rebuild orchestration:
-  - [ ] re-ingest one source against a chosen retrieval version
-  - [ ] re-ingest whole notebook
-  - [ ] record previous and target versions
-  - [ ] preserve old chunks until target build succeeds
-  - [ ] allow rollback / promotion
-- [ ] Extend RAG payload:
-  - [ ] retrieval-version scoped chunks
-  - [ ] search by requested retrieval version
-  - [ ] cleanup stale version payloads only after safe promotion
-- [ ] Add `/lab/reindex` UI:
-  - [ ] queue jobs
-  - [ ] progress
-  - [ ] failures
-  - [ ] promote successful rebuild
+- [x] Add durable re-index job model:
+  - [x] source-level
+  - [x] notebook-level
+  - [x] re-ingest
+  - [ ] re-embed only where compatible — deferred; Phase 17 always does full re-ingest
+  - [x] queued / running / retrying / failed / succeeded / cancelled
+- [x] Add rebuild orchestration:
+  - [x] re-ingest one source against a chosen retrieval version
+  - [x] re-ingest whole notebook
+  - [x] record previous and target versions
+  - [x] preserve old chunks until target build succeeds
+  - [x] allow rollback / promotion
+- [x] Extend RAG payload:
+  - [x] retrieval-version scoped chunks
+  - [ ] search by requested retrieval version — deferred to Phase 18 (needed for A/B comparison queries)
+  - [x] cleanup stale version payloads only after safe promotion
+- [x] Add `/lab/reindex` UI:
+  - [x] queue jobs
+  - [x] progress
+  - [x] failures
+  - [x] promote successful rebuild
 
 **Deliverable:** The owner can rebuild a notebook under a new retrieval design without corrupting the live knowledge base.
+
+**Current status (2026-05-17):** Implemented on `phase-17-reindex-retrieval-version-lifecycle`. `ReindexJob` entity (source/notebook scope) backed by `ReindexJobWorker`; worker ingests with target retrieval version, then removes old version's chunks only after success. `vector_store.delete_chunks` now accepts an optional `retrieval_version_id` so ingest preserves other versions' chunks during parallel rebuilds. Two new RAG DELETE endpoints for version-scoped chunk cleanup. `LabReindexController` (DevAdminOnly) exposes queue, list, promote, and cancel actions. `/lab/reindex` frontend page lists jobs and surfaces promote/cancel. Re-embed-only (same chunks, new embedding) and per-version search filtering remain deferred to Phase 18.
 
 ---
 

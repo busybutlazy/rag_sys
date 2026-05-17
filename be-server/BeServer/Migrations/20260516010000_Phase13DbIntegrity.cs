@@ -1,11 +1,14 @@
 using System;
+using BeServer.Data;
+using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Migrations;
 
 #nullable disable
 
 namespace BeServer.Migrations;
 
-/// <inheritdoc />
+[DbContext(typeof(AppDbContext))]
+[Migration("20260516010000_Phase13DbIntegrity")]
 public partial class Phase13DbIntegrity : Migration
 {
     /// <inheritdoc />

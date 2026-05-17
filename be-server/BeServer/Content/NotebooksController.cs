@@ -30,7 +30,8 @@ public class NotebooksController(AppDbContext db, CurrentUserAccessor currentUse
         await db.SaveChangesAsync();
         await retrievalVersions.CreateInitialVersionAsync(nb, UserId);
         await db.SaveChangesAsync();
-        return CreatedAtAction(nameof(Get), new { id = nb.Id }, nb);
+        return CreatedAtAction(nameof(Get), new { id = nb.Id },
+            new { nb.Id, nb.Name, nb.Description, nb.ActiveRetrievalVersionId, nb.CreatedAt, nb.UpdatedAt });
     }
 
     [HttpGet("{id}")]

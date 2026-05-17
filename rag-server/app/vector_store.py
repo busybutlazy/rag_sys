@@ -96,10 +96,23 @@ def store_chunks(
         ensure_vector_index(db)
 
 
-def delete_chunks(db, source_id: str, user_id: str) -> None:
+def delete_chunks(db, source_id: str, user_id: str, retrieval_version_id: str | None = None) -> None:
+    if retrieval_version_id is not None:
+        db.aql.execute(
+            "FOR doc IN chunks FILTER doc.source_id == @sid AND doc.user_id == @uid AND doc.retrieval_version_id == @rv REMOVE doc IN chunks",
+            bind_vars={"sid": source_id, "uid": user_id, "rv": retrieval_version_id},
+        )
+    else:
+        db.aql.execute(
+            "FOR doc IN chunks FILTER doc.source_id == @sid AND doc.user_id == @uid REMOVE doc IN chunks",
+            bind_vars={"sid": source_id, "uid": user_id},
+        )
+
+
+def delete_version_chunks(db, notebook_id: str, user_id: str, retrieval_version_id: str) -> None:
     db.aql.execute(
-        "FOR doc IN chunks FILTER doc.source_id == @sid AND doc.user_id == @uid REMOVE doc IN chunks",
-        bind_vars={"sid": source_id, "uid": user_id},
+        "FOR doc IN chunks FILTER doc.notebook_id == @nid AND doc.user_id == @uid AND doc.retrieval_version_id == @rv REMOVE doc IN chunks",
+        bind_vars={"nid": notebook_id, "uid": user_id, "rv": retrieval_version_id},
     )
 
 
