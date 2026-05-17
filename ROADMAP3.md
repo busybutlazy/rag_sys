@@ -19,23 +19,23 @@ Primary goals:
 
 ### Must finish before or inside the first ROADMAP3 phase
 
-- [ ] Complete the remaining **Phase 13** contract work that ROADMAP3 depends on:
+- [x] Complete the remaining **Phase 13** contract work that ROADMAP3 depends on:
   - [x] Stop accepting arbitrary frontend model names; frontend should send a preset/mode, BE resolves the concrete model, AI validates allowlist.
   - [x] Persist RAG config snapshots on chat requests, not only source ingestion.
   - [x] Add explicit retrieval/version metadata hooks needed for future re-ingest and comparisons.
-- [ ] Complete the essential parts of **Phase 14**:
-  - [ ] Add `user_id` to Arango retrieval documents where practical.
-  - [ ] Add cleanup tests for source / notebook / user deletion paths.
-  - [ ] Add isolation tests covering retrieval and experiment access.
+- [x] Complete the essential parts of **Phase 14**:
+  - [x] Add `user_id` to Arango retrieval documents where practical.
+  - [x] Add cleanup tests for source / notebook / user deletion paths.
+  - [x] Add isolation tests covering retrieval and experiment access.
 
 ### Can be deferred until after ROADMAP3 begins
 
 - [ ] Full one-ArangoDB-database-per-user promotion. The current helper script is enough for now if Arango documents carry ownership metadata.
-- [ ] Most of **Phase 15** deployment/operations work:
-  - [ ] production compose profile
-  - [ ] backup/restore runbooks
-  - [ ] broad metrics
-  - [ ] dependency update policy
+- [x] Most of **Phase 15** deployment/operations work (completed on `phase-15-runtime-operations`):
+  - [x] production compose profile
+  - [x] backup/restore runbooks
+  - [x] broad metrics
+  - [x] dependency update policy
 
 Reasoning: the Lab needs trustworthy ownership, versioning, and reproducibility before it needs production-grade operations. Otherwise it would generate sophisticated experiments on top of ambiguous data lineage.
 
