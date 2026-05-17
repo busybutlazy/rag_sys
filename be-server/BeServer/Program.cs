@@ -8,6 +8,7 @@ using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
+using System.Diagnostics;
 using System.Threading.RateLimiting;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -83,6 +84,7 @@ builder.Services.AddScoped<CurrentUserAccessor>();
 builder.Services.AddScoped<OwnershipService>();
 builder.Services.AddScoped<ChatMessageService>();
 builder.Services.AddSingleton<ModelRegistry>();
+builder.Services.AddSingleton<OperationalMetrics>();
 builder.Services.AddControllers();
 builder.Services.AddHttpClient<RagClient>(client =>
     client.BaseAddress = new Uri(
@@ -101,6 +103,26 @@ builder.Services.AddCors(options =>
 
 var app = builder.Build();
 app.UseMiddleware<CorrelationIdMiddleware>();
+app.Use(async (context, next) =>
+{
+    var sw = Stopwatch.StartNew();
+    var metrics = context.RequestServices.GetRequiredService<OperationalMetrics>();
+    var isError = false;
+    try
+    {
+        await next();
+        isError = context.Response.StatusCode >= 500;
+    }
+    catch
+    {
+        isError = true;
+        throw;
+    }
+    finally
+    {
+        metrics.ObserveRequest(sw.ElapsedMilliseconds, isError);
+    }
+});
 
 // ── Migrate & Seed ───────────────────────────────
 using (var scope = app.Services.CreateScope())
@@ -129,7 +151,7 @@ app.MapGet("/ready", async (AppDbContext db) =>
     await db.Database.CanConnectAsync()
         ? Results.Ok(new { status = "ready", service = "be-server" })
         : Results.StatusCode(StatusCodes.Status503ServiceUnavailable));
-app.MapGet("/metrics", async (AppDbContext db) =>
+app.MapGet("/metrics", async (AppDbContext db, OperationalMetrics operationalMetrics) =>
 {
     var since = DateTime.UtcNow.AddMinutes(-5);
     var requestCount = await db.RequestLogs.CountAsync(log => log.CreatedAt >= since);
@@ -144,7 +166,8 @@ app.MapGet("/metrics", async (AppDbContext db) =>
         .Where(job =>
             job.JobType == IngestionJobTypes.Ingest &&
             job.StartedAt != null &&
-            job.CompletedAt != null)
+            job.CompletedAt != null &&
+            job.CompletedAt >= since)
         .Select(job => new { job.StartedAt, job.CompletedAt })
         .ToListAsync();
     var averageIngestionDuration = ingestionDurations.Count == 0
@@ -153,7 +176,8 @@ app.MapGet("/metrics", async (AppDbContext db) =>
     return Results.Ok(new
     {
         window_minutes = 5,
-        requests = new { count = requestCount, errors = errorCount, average_duration_ms = averageRequestDuration },
+        http = operationalMetrics.Snapshot(),
+        outbound_requests = new { count = requestCount, errors = errorCount, average_duration_ms = averageRequestDuration },
         ingestion = new { queue_depth = queueDepth, average_duration_ms = averageIngestionDuration },
     });
 });
