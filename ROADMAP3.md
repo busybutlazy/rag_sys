@@ -20,9 +20,9 @@ Primary goals:
 ### Must finish before or inside the first ROADMAP3 phase
 
 - [ ] Complete the remaining **Phase 13** contract work that ROADMAP3 depends on:
-  - [ ] Stop accepting arbitrary frontend model names; frontend should send a preset/mode, BE resolves the concrete model, AI validates allowlist.
-  - [ ] Persist RAG config snapshots on chat requests, not only source ingestion.
-  - [ ] Add explicit retrieval/version metadata hooks needed for future re-ingest and comparisons.
+  - [x] Stop accepting arbitrary frontend model names; frontend should send a preset/mode, BE resolves the concrete model, AI validates allowlist.
+  - [x] Persist RAG config snapshots on chat requests, not only source ingestion.
+  - [x] Add explicit retrieval/version metadata hooks needed for future re-ingest and comparisons.
 - [ ] Complete the essential parts of **Phase 14**:
   - [ ] Add `user_id` to Arango retrieval documents where practical.
   - [ ] Add cleanup tests for source / notebook / user deletion paths.
@@ -196,47 +196,50 @@ Reasoning: the Lab needs trustworthy ownership, versioning, and reproducibility 
 
 **Goal:** Make retrieval configuration explicit, immutable, and reproducible.
 
-- [ ] Finish ROADMAP2 dependencies required for versioning:
-  - [ ] frontend model presets instead of arbitrary model strings
-  - [ ] chat request RAG config snapshots
-  - [ ] `user_id` lineage on Arango retrieval documents
-- [ ] Add Lab authorization gate:
-  - [ ] `dev_admin` capability
-  - [ ] backend authorization policy
-  - [ ] hidden frontend navigation
-- [ ] Add `RetrievalPresets`:
-  - [ ] global starter templates
-  - [ ] examples: `general`, `longform`, `keyword-heavy`, `transcript`
-  - [ ] editable by developers, not ordinary users
-- [ ] Add `NotebookRetrievalVersions`:
-  - [ ] notebook-local immutable versions
-  - [ ] optional parent version id
-  - [ ] optional origin preset id
-  - [ ] chunk size
-  - [ ] overlap
-  - [ ] embedding model
-  - [ ] embedding dimensions
-  - [ ] default search mode
-  - [ ] default `top_k`
-  - [ ] default hybrid alpha
-  - [ ] created by / created at / notes
-  - [ ] immutable after creation
-- [ ] Add preset-first activation model:
-  - [ ] notebooks start from a preset snapshot
-  - [ ] Lab edits fork a notebook-local version from the current version
-  - [ ] notebooks hold one active retrieval version for normal product use
-- [ ] Add retrieval lineage to ingestion:
-  - [ ] source active retrieval version
-  - [ ] document/chunk version metadata
-  - [ ] chat request retrieval snapshot
-- [ ] Add `/lab/retrieval-versions` UI:
-  - [ ] list
-  - [ ] create
-  - [ ] fork from preset or prior notebook version
-  - [ ] inspect
-  - [ ] mark active for the notebook
+- [x] Finish ROADMAP2 dependencies required for versioning:
+  - [x] frontend model presets instead of arbitrary model strings
+  - [x] chat request RAG config snapshots
+  - [x] `user_id` lineage on Arango retrieval documents
+- [x] Add Lab authorization gate:
+  - [x] `dev_admin` capability
+  - [x] backend authorization policy
+  - [x] hidden frontend navigation
+- [x] Add `RetrievalPresets`:
+  - [x] global starter templates
+  - [x] examples: `general`, `longform`, `keyword-heavy`, `transcript`
+  - [x] editable by developers, not ordinary users
+- [x] Add `NotebookRetrievalVersions`:
+  - [x] notebook-local immutable versions
+  - [x] optional parent version id
+  - [x] optional origin preset id
+  - [x] chunk size
+  - [x] overlap
+  - [x] embedding model
+  - [x] embedding dimensions
+  - [x] default search mode
+  - [x] default `top_k`
+  - [x] default hybrid alpha
+  - [x] created by / created at / notes
+  - [x] immutable after creation
+- [x] Add preset-first activation model:
+  - [x] notebooks start from a preset snapshot
+  - [x] Lab edits fork a notebook-local version from the current version
+  - [x] notebooks hold one active retrieval version for normal product use
+- [x] Add retrieval lineage to ingestion:
+  - [x] source active retrieval version
+  - [x] document/chunk version metadata
+  - [x] chat request retrieval snapshot
+- [x] Add `/lab/retrieval-versions` UI:
+  - [x] list
+  - [x] create
+  - [x] fork from preset or prior notebook version
+  - [x] inspect
+  - [x] mark active for the notebook
 
 **Deliverable:** Every notebook can begin simply from a preset, then grow its own auditable retrieval version tree when Lab work begins.
+
+
+**Current status (2026-05-17):** Implemented on `phase-16-lab-foundations-versioned-retrieval`. The system now has dev-admin-gated Lab access, seeded global retrieval presets, notebook-local immutable retrieval versions, notebook/source/chat lineage fields, RAG payload metadata for retrieval versions, model-preset handling at the BE boundary, and a first `/lab/retrieval-versions` UI for listing, creating, and activating versions while making the pending re-index boundary explicit.
 
 ---
 
