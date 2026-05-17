@@ -89,7 +89,7 @@ namespace BeServer.Migrations
             {
                 b.Property<string>("Id").HasMaxLength(36).HasColumnType("varchar(36)");
                 b.Property<int>("AttemptCount").HasColumnType("int");
-                b.Property<DateTime?>("AvailableAt").HasColumnType("datetime");
+                b.Property<DateTime>("AvailableAt").HasColumnType("datetime");
                 b.Property<DateTime?>("CompletedAt").HasColumnType("datetime");
                 b.Property<DateTime>("CreatedAt").HasColumnType("datetime");
                 b.Property<string>("JobType").IsRequired().HasMaxLength(32).HasColumnType("varchar(32)");
@@ -141,6 +141,7 @@ namespace BeServer.Migrations
                 b.Property<string>("UserId").IsRequired().HasMaxLength(36).HasColumnType("varchar(36)");
                 b.HasKey("Id");
                 b.HasIndex("NotebookId");
+                b.HasIndex("ActiveTaskId");
                 b.HasIndex("UserId");
                 b.HasIndex("UserId", "NotebookId");
                 b.ToTable("ChatSessions");
@@ -163,6 +164,7 @@ namespace BeServer.Migrations
                 b.Property<string>("UserId").IsRequired().HasMaxLength(36).HasColumnType("varchar(36)");
                 b.HasKey("Id");
                 b.HasIndex("NotebookId");
+                b.HasIndex("RequestId");
                 b.HasIndex("SessionId");
                 b.HasIndex("SessionId", "Sequence").IsUnique();
                 b.HasIndex("UserId");
@@ -208,6 +210,7 @@ namespace BeServer.Migrations
                 b.Property<string>("Url").HasMaxLength(2048).HasColumnType("varchar(2048)");
                 b.HasKey("Id");
                 b.HasIndex("ChatRequestId");
+                b.HasIndex("CreatedAt");
                 b.HasIndex("Service", "Operation");
                 b.HasIndex("SessionId");
                 b.ToTable("RequestLogs");
@@ -228,8 +231,10 @@ namespace BeServer.Migrations
                 b.Property<DateTime>("UpdatedAt").HasColumnType("datetime");
                 b.Property<string>("UpdatedFromRequestId").HasMaxLength(36).HasColumnType("varchar(36)");
                 b.HasKey("Id");
+                b.HasIndex("CreatedFromRequestId");
                 b.HasIndex("SessionId");
                 b.HasIndex("SessionId", "Status");
+                b.HasIndex("UpdatedFromRequestId");
                 b.ToTable("SessionTasks");
             });
 
@@ -313,6 +318,10 @@ namespace BeServer.Migrations
                     .HasForeignKey("UserId")
                     .OnDelete(DeleteBehavior.Cascade)
                     .IsRequired();
+                b.HasOne("BeServer.Data.Entities.SessionTask", null)
+                    .WithMany()
+                    .HasForeignKey("ActiveTaskId")
+                    .OnDelete(DeleteBehavior.SetNull);
                 b.Navigation("Notebook");
                 b.Navigation("User");
             });
@@ -324,6 +333,10 @@ namespace BeServer.Migrations
                     .HasForeignKey("NotebookId")
                     .OnDelete(DeleteBehavior.Cascade)
                     .IsRequired();
+                b.HasOne("BeServer.Data.Entities.ChatRequest", null)
+                    .WithMany()
+                    .HasForeignKey("RequestId")
+                    .OnDelete(DeleteBehavior.SetNull);
                 b.HasOne("BeServer.Data.Entities.ChatSession", "Session")
                     .WithMany("Messages")
                     .HasForeignKey("SessionId")
@@ -365,6 +378,14 @@ namespace BeServer.Migrations
 
             modelBuilder.Entity("BeServer.Data.Entities.SessionTask", b =>
             {
+                b.HasOne("BeServer.Data.Entities.ChatRequest", null)
+                    .WithMany()
+                    .HasForeignKey("CreatedFromRequestId")
+                    .OnDelete(DeleteBehavior.SetNull);
+                b.HasOne("BeServer.Data.Entities.ChatRequest", null)
+                    .WithMany()
+                    .HasForeignKey("UpdatedFromRequestId")
+                    .OnDelete(DeleteBehavior.SetNull);
                 b.HasOne("BeServer.Data.Entities.ChatSession", "Session")
                     .WithMany("Tasks")
                     .HasForeignKey("SessionId")

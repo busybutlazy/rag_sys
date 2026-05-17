@@ -15,8 +15,30 @@ class FakeAql:
 
 
 class FakeDb:
-    def __init__(self):
+    def __init__(self, indexes=None, document_count=1):
         self.aql = FakeAql()
+        self._collection = FakeCollection(indexes=indexes, document_count=document_count)
+
+    def collection(self, name):
+        self._collection.name = name
+        return self._collection
+
+
+class FakeCollection:
+    def __init__(self, indexes=None, document_count=1):
+        self.name = None
+        self._indexes = [{"type": "vector"}] if indexes is None else indexes
+        self._document_count = document_count
+        self.added_indexes = []
+
+    def indexes(self):
+        return self._indexes
+
+    def count(self):
+        return self._document_count
+
+    def add_index(self, index):
+        self.added_indexes.append(index)
 
 
 class VectorStoreTests(unittest.TestCase):
@@ -30,6 +52,26 @@ class VectorStoreTests(unittest.TestCase):
             {"notebook_id": "nb-1", "query_vec": [0.1, 0.2], "top_k": 7},
             db.aql.last_bind_vars,
         )
+
+    def test_search_vector_returns_empty_before_first_vector_index(self):
+        db = FakeDb(indexes=[])
+
+        self.assertEqual([], vector_store.search_vector(db, [0.1, 0.2], "nb-1", 7))
+        self.assertIsNone(db.aql.last_query)
+
+    def test_ensure_vector_index_waits_for_documents(self):
+        db = FakeDb(indexes=[], document_count=0)
+
+        vector_store.ensure_vector_index(db)
+
+        self.assertEqual([], db._collection.added_indexes)
+
+    def test_ensure_vector_index_caps_nlists_to_document_count(self):
+        db = FakeDb(indexes=[], document_count=1)
+
+        vector_store.ensure_vector_index(db)
+
+        self.assertEqual(1, db._collection.added_indexes[0]["params"]["nLists"])
 
 
 if __name__ == "__main__":

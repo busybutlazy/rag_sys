@@ -136,7 +136,7 @@ public class SourcesController(
             OriginalContentType = originalContentType,
             DetectedMimeType = detectedMimeType,
             FileSizeBytes = file.Length,
-            Status = IngestionJobStatuses.Queued,
+            Status = SourceStatuses.Queued,
         };
 
         // LOGIC-02: persist DB record first; then write file
@@ -155,7 +155,7 @@ public class SourcesController(
         }
         catch (Exception ex)
         {
-            source.Status = IngestionJobStatuses.Failed;
+            source.Status = SourceStatuses.Failed;
             source.UpdatedAt = DateTime.UtcNow;
             var failedJob = new IngestionJob
             {
@@ -352,6 +352,54 @@ public class SourcesController(
         db.Sources.Remove(source);
         await db.SaveChangesAsync();
         return NoContent();
+    }
+
+    [HttpPost("{id}/reingest")]
+    public async Task<IActionResult> Reingest(string notebookId, string id)
+    {
+        var source = await db.Sources.FirstOrDefaultAsync(
+            s => s.Id == id && s.NotebookId == notebookId && s.UserId == UserId);
+        if (source is null) return ApiErrors.NotFound(this, "source.not_found", "Source not found");
+
+        if (source.FilePath is null || !System.IO.File.Exists(source.FilePath))
+            return ApiErrors.BadRequest(this, "source.file_missing", "Source file is no longer available for re-ingestion");
+
+        var now = DateTime.UtcNow;
+        var activeJobs = await db.IngestionJobs
+            .Where(j =>
+                j.SourceId == id &&
+                j.NotebookId == notebookId &&
+                j.UserId == UserId &&
+                j.JobType == IngestionJobTypes.Ingest &&
+                (j.Status == IngestionJobStatuses.Queued ||
+                 j.Status == IngestionJobStatuses.Retrying ||
+                 j.Status == IngestionJobStatuses.Running))
+            .ToListAsync();
+        foreach (var job in activeJobs)
+        {
+            job.Status = IngestionJobStatuses.Cancelled;
+            job.LastError = "Superseded by manual re-ingest request.";
+            job.CompletedAt = now;
+            job.UpdatedAt = now;
+        }
+
+        var newJob = new IngestionJob
+        {
+            SourceId = source.Id,
+            NotebookId = notebookId,
+            UserId = UserId,
+            JobType = IngestionJobTypes.Ingest,
+            Status = IngestionJobStatuses.Queued,
+            AvailableAt = now,
+            CreatedAt = now,
+            UpdatedAt = now,
+        };
+        db.IngestionJobs.Add(newJob);
+        source.Status = SourceStatuses.Queued;
+        source.UpdatedAt = now;
+        await db.SaveChangesAsync();
+
+        return Accepted(new { jobId = newJob.Id, sourceId = source.Id, status = newJob.Status });
     }
 }
 

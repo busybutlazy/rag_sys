@@ -43,7 +43,7 @@ public class IngestionJobWorker(
             .Where(j =>
                 j.JobType == IngestionJobTypes.Ingest &&
                 (j.Status == IngestionJobStatuses.Queued || j.Status == IngestionJobStatuses.Retrying) &&
-                (j.AvailableAt == null || j.AvailableAt <= now) &&
+                j.AvailableAt <= now &&
                 j.AttemptCount < j.MaxAttempts)
             .OrderBy(j => j.AvailableAt)
             .ThenBy(j => j.CreatedAt)
@@ -71,7 +71,7 @@ public class IngestionJobWorker(
         job.StartedAt = now;
         job.UpdatedAt = now;
         job.LastError = null;
-        source.Status = IngestionJobStatuses.Running;
+        source.Status = SourceStatuses.Running;
         source.UpdatedAt = now;
         await db.SaveChangesAsync(cancellationToken);
 
@@ -94,7 +94,7 @@ public class IngestionJobWorker(
             job.LastError = "Worker stopped before ingestion completed.";
             job.AvailableAt = now.AddSeconds(30);
             job.UpdatedAt = now;
-            source.Status = IngestionJobStatuses.Retrying;
+            source.Status = SourceStatuses.Retrying;
             source.UpdatedAt = now;
             await db.SaveChangesAsync(CancellationToken.None);
             throw;
@@ -105,10 +105,10 @@ public class IngestionJobWorker(
             var canRetry = job.AttemptCount < job.MaxAttempts;
             job.Status = canRetry ? IngestionJobStatuses.Retrying : IngestionJobStatuses.Failed;
             job.LastError = ex.Message;
-            job.AvailableAt = canRetry ? now.Add(BackoffFor(job.AttemptCount)) : null;
+            job.AvailableAt = canRetry ? now.Add(BackoffFor(job.AttemptCount)) : now;
             job.CompletedAt = canRetry ? null : now;
             job.UpdatedAt = now;
-            source.Status = canRetry ? IngestionJobStatuses.Retrying : IngestionJobStatuses.Failed;
+            source.Status = canRetry ? SourceStatuses.Retrying : SourceStatuses.Failed;
             source.UpdatedAt = now;
             await db.SaveChangesAsync(cancellationToken);
 
