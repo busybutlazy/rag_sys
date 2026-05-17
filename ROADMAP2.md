@@ -367,31 +367,33 @@ Phase 9 was implemented on `phase-9-reliable-ingestion-jobs`. Source uploads now
 
 **Goal:** Prepare the system for a real deployment environment.
 
-- [ ] Add production compose or deployment profile:
-  - [ ] no default development secrets
-  - [ ] production `ASPNETCORE_ENVIRONMENT`
-  - [ ] persistent volume backup guidance
-  - [ ] no direct database exposure
-- [ ] Add backup/restore runbooks:
-  - [ ] MySQL
-  - [ ] ArangoDB
-  - [ ] uploaded files volume
-- [ ] Add health/readiness split:
-  - [ ] liveness endpoint
-  - [ ] readiness endpoint that checks dependencies
-- [ ] Add basic metrics:
-  - [ ] request count/latency/error rate
-  - [ ] ingestion queue depth
-  - [ ] ingestion duration
-  - [ ] LLM request latency/errors
-  - [ ] retrieval latency
-- [ ] Add dependency update policy:
-  - [ ] Docker base image update cadence
-  - [ ] Python dependency lock strategy
-  - [ ] npm audit policy
-  - [ ] .NET package audit
+- [x] Add production compose or deployment profile:
+  - [x] no default development secrets
+  - [x] production `ASPNETCORE_ENVIRONMENT`
+  - [x] persistent volume backup guidance
+  - [x] no direct database exposure
+- [x] Add backup/restore runbooks:
+  - [x] MySQL
+  - [x] ArangoDB
+  - [x] uploaded files volume
+- [x] Add health/readiness split:
+  - [x] liveness endpoint
+  - [x] readiness endpoint that checks dependencies
+- [x] Add basic metrics:
+  - [x] request count/latency/error rate
+  - [x] ingestion queue depth
+  - [x] ingestion duration
+  - [x] LLM request latency/errors
+  - [x] retrieval latency
+- [x] Add dependency update policy:
+  - [x] Docker base image update cadence
+  - [x] Python dependency lock strategy
+  - [x] npm audit policy
+  - [x] .NET package audit
 
 **Deliverable:** Operators can deploy, monitor, back up, and recover the system with documented procedures.
+
+**Current status (2026-05-17):** Implemented on `phase-15-runtime-operations`. The repo now includes a production compose overlay, deployment/backup/dependency-policy runbooks, liveness/readiness endpoints, dependency-aware compose healthchecks, and lightweight JSON metrics for BE ingestion/request state plus AI/RAG request-operation counters.
 
 ---
 

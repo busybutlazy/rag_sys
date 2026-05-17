@@ -1,0 +1,26 @@
+# Production overlay:
+#   docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build
+#
+# Requires a non-default .env.prod file or equivalent injected secrets.
+# Databases remain internal-only; only the frontend port is published.
+
+services:
+  be-server:
+    environment:
+      ASPNETCORE_ENVIRONMENT: Production
+    restart: unless-stopped
+
+  ai-server:
+    restart: unless-stopped
+
+  rag-server:
+    restart: unless-stopped
+
+  frontend:
+    restart: unless-stopped
+
+  mysql:
+    restart: unless-stopped
+
+  arangodb:
+    restart: unless-stopped

@@ -1,6 +1,7 @@
 import json
 import os
 import time
+import httpx
 from fastapi import Depends, FastAPI, Header
 from fastapi import HTTPException
 from fastapi.responses import StreamingResponse
@@ -11,6 +12,7 @@ from app.gateway.openai_provider import OpenAIGateway
 from app.json_logging import configure_json_logging
 from app.models import AgentRunRequest, ChatRequest, SessionStateUpdateRequest
 from app import rag_client
+from app.metrics import metrics, observe_http
 
 configure_json_logging()
 
@@ -29,6 +31,7 @@ if len(_RAG_INTERNAL_SECRET) < _MIN_SECRET_LEN:
     raise SystemExit(f"RAG_INTERNAL_SECRET must be at least {_MIN_SECRET_LEN} characters")
 
 app = FastAPI(title="AI Server", version="0.1.0")
+app.middleware("http")(observe_http)
 
 _gateway = OpenAIGateway(api_key=os.environ.get("OPENAI_API_KEY", ""))
 
@@ -49,6 +52,22 @@ _RAG_SYSTEM_PROMPT = (
 @app.get("/health")
 async def health():
     return {"status": "ok", "service": "ai-server"}
+
+
+@app.get("/ready")
+async def ready():
+    try:
+        async with httpx.AsyncClient(timeout=3.0) as client:
+            res = await client.get(f"{os.environ.get('RAG_SERVER_URL', 'http://rag-server:8003')}/health")
+            res.raise_for_status()
+        return {"status": "ready", "service": "ai-server"}
+    except Exception as exc:
+        raise HTTPException(status_code=503, detail=f"rag dependency unavailable: {exc}")
+
+
+@app.get("/metrics")
+async def get_metrics():
+    return metrics.snapshot()
 
 
 @app.post("/chat/completions")
@@ -119,6 +138,7 @@ async def chat_completions(
         try:
             started = time.perf_counter()
             async for token in _gateway.stream_complete(messages, req.model):
+                metrics.increment("llm_chat_stream_tokens")
                 yield f"data: {json.dumps({'token': token})}\n\n"
             await be_client.log_request(
                 chat_request_id=req.request_id,
@@ -243,6 +263,7 @@ async def agent_run(
 ):
     if req.model not in _ALLOWED_MODELS:
         raise HTTPException(status_code=422, detail=f"Model '{req.model}' is not allowed")
+    metrics.increment("agent_runs")
 
     async def event_stream():
         try:
