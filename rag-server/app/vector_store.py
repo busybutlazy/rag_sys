@@ -40,30 +40,35 @@ def ensure_vector_index(db) -> None:
 
 
 def ensure_search_view(db) -> None:
+    properties = {
+        "links": {
+            "chunks": {
+                "fields": {
+                    "text": {"analyzers": ["text_en"]},
+                    "notebook_id": {"analyzers": ["identity"]},
+                    "user_id": {"analyzers": ["identity"]},
+                    "source_id": {"analyzers": ["identity"]},
+                    "chunk_index": {},
+                }
+            }
+        }
+    }
     existing = {v["name"] for v in db.views()}
     if "chunks_view" not in existing:
         db.create_view(
             name="chunks_view",
             view_type="arangosearch",
-            properties={
-                "links": {
-                    "chunks": {
-                        "fields": {
-                            "text": {"analyzers": ["text_en"]},
-                            "notebook_id": {"analyzers": ["identity"]},
-                            "source_id": {"analyzers": ["identity"]},
-                            "chunk_index": {},
-                        }
-                    }
-                }
-            },
+            properties=properties,
         )
+    else:
+        db.update_arangosearch_view(name="chunks_view", properties=properties)
 
 
 def store_chunks(
     db,
     source_id: str,
     notebook_id: str,
+    user_id: str,
     chunks: list[str],
     embeddings: list[list[float]],
 ) -> None:
@@ -73,6 +78,7 @@ def store_chunks(
             "_key": str(uuid.uuid4()).replace("-", ""),
             "source_id": source_id,
             "notebook_id": notebook_id,
+            "user_id": user_id,
             "chunk_index": i,
             "text": chunk,
             "embedding": embedding,
@@ -84,17 +90,37 @@ def store_chunks(
         ensure_vector_index(db)
 
 
-def delete_chunks(db, source_id: str) -> None:
+def delete_chunks(db, source_id: str, user_id: str) -> None:
     db.aql.execute(
-        "FOR doc IN chunks FILTER doc.source_id == @sid REMOVE doc IN chunks",
-        bind_vars={"sid": source_id},
+        "FOR doc IN chunks FILTER doc.source_id == @sid AND doc.user_id == @uid REMOVE doc IN chunks",
+        bind_vars={"sid": source_id, "uid": user_id},
     )
+
+
+def delete_notebook_payload(db, notebook_id: str, user_id: str) -> None:
+    db.aql.execute(
+        "FOR doc IN chunks FILTER doc.notebook_id == @nid AND doc.user_id == @uid REMOVE doc IN chunks",
+        bind_vars={"nid": notebook_id, "uid": user_id},
+    )
+    db.aql.execute(
+        "FOR doc IN documents FILTER doc.notebook_id == @nid AND doc.user_id == @uid REMOVE doc IN documents",
+        bind_vars={"nid": notebook_id, "uid": user_id},
+    )
+
+
+def delete_user_payload(db, user_id: str) -> None:
+    for collection in ("chunks", "documents", "experiments"):
+        db.aql.execute(
+            f"FOR doc IN {collection} FILTER doc.user_id == @uid REMOVE doc IN {collection}",
+            bind_vars={"uid": user_id},
+        )
 
 
 def search_vector(
     db,
     query_embedding: list[float],
     notebook_id: str,
+    user_id: str,
     top_k: int = 5,
 ) -> list[dict]:
     col = db.collection("chunks")
@@ -105,6 +131,7 @@ def search_vector(
     aql = """
     FOR doc IN chunks
       FILTER doc.notebook_id == @notebook_id
+        AND doc.user_id == @user_id
       SORT APPROX_NEAR_COSINE(doc.embedding, @query_vec) DESC
       LIMIT @top_k
       RETURN {
@@ -117,6 +144,7 @@ def search_vector(
         aql,
         bind_vars={
             "notebook_id": notebook_id,
+            "user_id": user_id,
             "query_vec": query_embedding,
             "top_k": top_k,
         },
@@ -128,11 +156,13 @@ def search_bm25(
     db,
     query: str,
     notebook_id: str,
+    user_id: str,
     top_k: int = 5,
 ) -> list[dict]:
     aql = """
     FOR doc IN chunks_view
       SEARCH doc.notebook_id == @notebook_id
+        AND doc.user_id == @user_id
         AND ANALYZER(doc.text IN TOKENS(@query, 'text_en'), 'text_en')
       SORT BM25(doc) DESC
       LIMIT @top_k
@@ -144,7 +174,7 @@ def search_bm25(
     """
     cursor = db.aql.execute(
         aql,
-        bind_vars={"notebook_id": notebook_id, "query": query, "top_k": top_k},
+        bind_vars={"notebook_id": notebook_id, "user_id": user_id, "query": query, "top_k": top_k},
     )
     return list(cursor)
 
@@ -154,12 +184,13 @@ def search_hybrid(
     query_embedding: list[float],
     query: str,
     notebook_id: str,
+    user_id: str,
     top_k: int = 5,
     alpha: float = 0.5,
 ) -> list[dict]:
     fetch_k = min(top_k * 3, 60)
-    vec_results = search_vector(db, query_embedding, notebook_id, fetch_k)
-    bm25_results = search_bm25(db, query, notebook_id, fetch_k)
+    vec_results = search_vector(db, query_embedding, notebook_id, user_id, fetch_k)
+    bm25_results = search_bm25(db, query, notebook_id, user_id, fetch_k)
 
     k_rrf = 60
     scores: dict[tuple, float] = {}
@@ -184,12 +215,14 @@ def get_source_content(
     db,
     source_id: str,
     notebook_id: str,
+    user_id: str,
     max_chars: int = 12000,
 ) -> dict:
     aql = """
     FOR doc IN chunks
       FILTER doc.source_id == @source_id
         AND doc.notebook_id == @notebook_id
+        AND doc.user_id == @user_id
       SORT doc.chunk_index ASC
       RETURN {
         source_id: doc.source_id,
@@ -199,7 +232,7 @@ def get_source_content(
     """
     cursor = db.aql.execute(
         aql,
-        bind_vars={"source_id": source_id, "notebook_id": notebook_id},
+        bind_vars={"source_id": source_id, "notebook_id": notebook_id, "user_id": user_id},
     )
     chunks = list(cursor)
     returned_chunks: list[dict] = []

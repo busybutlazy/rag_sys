@@ -9,14 +9,14 @@ namespace BeServer.Content;
 [Route("api/notebooks/{notebookId}/experiments")]
 [Authorize]
 [EnableRateLimiting("write")]
-public class ExperimentsController(OwnershipService ownership, RagClient rag) : ControllerBase
+public class ExperimentsController(OwnershipService ownership, RagClient rag, CurrentUserAccessor currentUser) : ControllerBase
 {
     [HttpGet]
     public async Task<IActionResult> List(string notebookId, [FromQuery] int limit = 20)
     {
         if (!await ownership.NotebookExistsAsync(notebookId))
             return ApiErrors.NotFound(this, "notebook.not_found", "Notebook not found");
-        return Ok(await rag.ListExperimentsAsync(notebookId, Math.Clamp(limit, 1, 100)));
+        return Ok(await rag.ListExperimentsAsync(notebookId, currentUser.UserId, Math.Clamp(limit, 1, 100)));
     }
 
     [HttpGet("{experimentId}")]
@@ -24,7 +24,7 @@ public class ExperimentsController(OwnershipService ownership, RagClient rag) : 
     {
         if (!await ownership.NotebookExistsAsync(notebookId))
             return ApiErrors.NotFound(this, "notebook.not_found", "Notebook not found");
-        return Ok(await rag.GetExperimentAsync(notebookId, experimentId));
+        return Ok(await rag.GetExperimentAsync(notebookId, currentUser.UserId, experimentId));
     }
 
     [HttpPost]
@@ -38,6 +38,6 @@ public class ExperimentsController(OwnershipService ownership, RagClient rag) : 
             return ApiErrors.BadRequest(this, "experiment.invalid_query", "Queries must be non-empty and at most 500 characters.");
 
         var config = req.Config ?? new ExperimentConfig(["vector", "bm25", "hybrid"]);
-        return Ok(await rag.RunExperimentAsync(notebookId, req with { Config = config }));
+        return Ok(await rag.RunExperimentAsync(notebookId, currentUser.UserId, req with { Config = config }));
     }
 }

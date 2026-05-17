@@ -77,7 +77,7 @@ public class IngestionJobWorker(
 
         try
         {
-            await rag.IngestAsync(source.Id, source.NotebookId, source.FilePath ?? "", source.MimeType ?? "application/octet-stream");
+            await rag.IngestAsync(source.Id, source.NotebookId, source.UserId, source.FilePath ?? "", source.MimeType ?? "application/octet-stream");
 
             now = DateTime.UtcNow;
             job.Status = IngestionJobStatuses.Succeeded;

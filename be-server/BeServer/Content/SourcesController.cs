@@ -327,7 +327,7 @@ public class SourcesController(
         }
 
         // LOGIC-01: delete from ArangoDB before removing the MySQL record
-        try { await rag.DeleteAsync(id); }
+        try { await rag.DeleteAsync(id, UserId); }
         catch (Exception ex)
         {
             db.IngestionJobs.Add(new IngestionJob
