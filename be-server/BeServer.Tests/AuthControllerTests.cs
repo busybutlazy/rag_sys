@@ -62,6 +62,15 @@ public class AuthControllerTests
     }
 
     [Fact]
+    public void GenerateAccessToken_IncludesDevAdminClaim()
+    {
+        var principal = CreateJwtService().ValidateAccessToken(
+            CreateJwtService().GenerateAccessToken("user-1", "admin", isDevAdmin: true));
+
+        Assert.Equal("true", principal?.FindFirst("dev_admin")?.Value);
+    }
+
+    [Fact]
     public async Task Refresh_RotatesTokenAndRevokesFamilyOnReuse()
     {
         await using var db = CreateDb();

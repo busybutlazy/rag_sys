@@ -218,8 +218,9 @@ static async Task SeedAdminUser(AppDbContext db, IConfiguration config)
 {
     var username = config["ADMIN_USERNAME"] ?? "admin";
     var password = config["ADMIN_PASSWORD"] ?? "changeme";
+    var existing = await db.Users.SingleOrDefaultAsync(u => u.Username == username);
 
-    if (!await db.Users.AnyAsync(u => u.Username == username))
+    if (existing is null)
     {
         db.Users.Add(new User
         {
@@ -227,6 +228,12 @@ static async Task SeedAdminUser(AppDbContext db, IConfiguration config)
             PasswordHash = BCrypt.Net.BCrypt.HashPassword(password, workFactor: 12),
             IsDevAdmin = true,
         });
+        await db.SaveChangesAsync();
+    }
+    else if (!existing.IsDevAdmin)
+    {
+        existing.IsDevAdmin = true;
+        existing.UpdatedAt = DateTime.UtcNow;
         await db.SaveChangesAsync();
     }
 }
