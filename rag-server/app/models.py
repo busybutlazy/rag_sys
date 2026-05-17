@@ -1,12 +1,24 @@
 from pydantic import BaseModel, Field
 
 
+class RetrievalConfig(BaseModel):
+    retrieval_version_id: str
+    chunk_size: int
+    chunk_overlap: int
+    embedding_model: str
+    embedding_dimensions: int
+    search_mode: str
+    top_k: int
+    hybrid_alpha: float
+
+
 class IngestRequest(BaseModel):
     source_id: str
     notebook_id: str
     user_id: str
     file_path: str
     mime_type: str
+    retrieval: RetrievalConfig | None = None
 
 
 class ChunkResult(BaseModel):

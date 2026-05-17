@@ -183,9 +183,14 @@ public class ChatSessionsController(
 
         var now = DateTime.UtcNow;
         var mode = NormalizeMode(req.Mode ?? session.Mode);
-        var model = modelRegistry.Resolve(
-            req.Model,
-            mode == "agent" ? modelRegistry.AgentDefault : modelRegistry.ChatDefault);
+        var model = modelRegistry.ResolvePreset(req.ModelPreset, mode);
+        var activeRetrievalVersionId = await db.Notebooks
+            .Where(n => n.Id == notebookId && n.UserId == UserId)
+            .Select(n => n.ActiveRetrievalVersionId)
+            .SingleAsync();
+        var retrievalVersion = activeRetrievalVersionId is null
+            ? null
+            : await db.NotebookRetrievalVersions.SingleOrDefaultAsync(v => v.Id == activeRetrievalVersionId);
         var nextSequence = (await db.ChatMessages
             .Where(m => m.SessionId == sessionId)
             .MaxAsync(m => (int?)m.Sequence) ?? 0) + 1;
@@ -196,8 +201,23 @@ public class ChatSessionsController(
             SessionId = sessionId,
             Mode = mode,
             Model = model,
+            RetrievalVersionId = retrievalVersion?.Id,
             Status = ChatRequestStatuses.Running,
-            ContextSnapshotJson = ToLimitedJson(contextMessages),
+            ContextSnapshotJson = ToLimitedJson(new
+            {
+                messages = contextMessages,
+                retrieval = retrievalVersion is null ? null : new
+                {
+                    retrievalVersion.Id,
+                    retrievalVersion.ChunkSize,
+                    retrievalVersion.ChunkOverlap,
+                    retrievalVersion.EmbeddingModel,
+                    retrievalVersion.EmbeddingDimensions,
+                    retrievalVersion.DefaultSearchMode,
+                    retrievalVersion.DefaultTopK,
+                    retrievalVersion.DefaultHybridAlpha,
+                },
+            }),
             StartedAt = now,
         };
         var userMessage = new ChatMessage
@@ -562,7 +582,7 @@ public class ChatSessionsController(
 }
 
 public record CreateChatSessionRequest(string? Title, string? Mode);
-public record ChatRunRequest(string Content, string? Mode, string? Model);
+public record ChatRunRequest(string Content, string? Mode, string? ModelPreset);
 
 internal record SessionTaskProjection(
     string Id,

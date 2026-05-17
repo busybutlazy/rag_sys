@@ -12,6 +12,8 @@ public class Source
     public string? DetectedMimeType { get; set; }
     public long? FileSizeBytes { get; set; }
     public string Status { get; set; } = SourceStatuses.Uploaded;
+    public string? ActiveRetrievalVersionId { get; set; }
+    public string? LastIndexedRetrievalVersionId { get; set; }
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
     public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
 

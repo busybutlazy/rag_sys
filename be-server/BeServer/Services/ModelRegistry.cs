@@ -12,6 +12,15 @@ public class ModelRegistry(IConfiguration config)
         (config["Models:Allowed"] ?? string.Join(',', DefaultAllowed))
         .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
 
+    public string ResolvePreset(string? preset, string mode) =>
+        preset switch
+        {
+            "agent_default" => AgentDefault,
+            "summary_default" => SummaryDefault,
+            "chat_default" or null or "" => mode == "agent" ? AgentDefault : ChatDefault,
+            _ => mode == "agent" ? AgentDefault : ChatDefault,
+        };
+
     public string Resolve(string? requested, string @default) =>
         string.IsNullOrWhiteSpace(requested) || !AllowedModels.Contains(requested, StringComparer.Ordinal)
             ? @default

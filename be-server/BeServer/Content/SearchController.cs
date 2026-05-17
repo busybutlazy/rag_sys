@@ -1,13 +1,14 @@
 using BeServer.Services;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
 
 namespace BeServer.Content;
 
 [ApiController]
 [Route("api/notebooks/{notebookId}/search")]
 [Authorize]
-public class SearchController(OwnershipService ownership, RagClient rag, CurrentUserAccessor currentUser) : ControllerBase
+public class SearchController(OwnershipService ownership, RagClient rag, CurrentUserAccessor currentUser, BeServer.Data.AppDbContext db) : ControllerBase
 {
     private static readonly string[] ValidModes = ["vector", "bm25", "hybrid"];
 
@@ -15,17 +16,24 @@ public class SearchController(OwnershipService ownership, RagClient rag, Current
     public async Task<IActionResult> Search(
         string notebookId,
         [FromQuery] string q,
-        [FromQuery] string mode = "hybrid",
-        [FromQuery] int topK = 5)
+        [FromQuery] string? mode = null,
+        [FromQuery] int? topK = null)
     {
         if (string.IsNullOrWhiteSpace(q))
             return ApiErrors.BadRequest(this, "search.query_required", "q is required");
-        if (!ValidModes.Contains(mode))
+        var activeVersionId = await db.Notebooks
+            .Where(n => n.Id == notebookId && n.UserId == currentUser.UserId)
+            .Select(n => n.ActiveRetrievalVersionId)
+            .SingleOrDefaultAsync();
+        var version = activeVersionId is null ? null : await db.NotebookRetrievalVersions.SingleOrDefaultAsync(v => v.Id == activeVersionId);
+        var effectiveMode = mode ?? version?.DefaultSearchMode ?? "hybrid";
+        var effectiveTopK = topK ?? version?.DefaultTopK ?? 5;
+        if (!ValidModes.Contains(effectiveMode))
             return ApiErrors.BadRequest(this, "search.invalid_mode", "mode must be vector, bm25, or hybrid");
         if (!await ownership.NotebookExistsAsync(notebookId))
             return ApiErrors.NotFound(this, "notebook.not_found", "Notebook not found");
 
-        return Ok(await rag.SearchAsync(q, notebookId, currentUser.UserId, mode, topK));
+        return Ok(await rag.SearchAsync(q, notebookId, currentUser.UserId, effectiveMode, effectiveTopK));
     }
 
     [HttpGet("benchmark")]

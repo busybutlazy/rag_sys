@@ -138,6 +138,10 @@ public class SourcesController(
             FileSizeBytes = file.Length,
             Status = SourceStatuses.Queued,
         };
+        source.ActiveRetrievalVersionId = await db.Notebooks
+            .Where(n => n.Id == notebookId && n.UserId == UserId)
+            .Select(n => n.ActiveRetrievalVersionId)
+            .SingleAsync();
 
         // LOGIC-02: persist DB record first; then write file
         var filePath = Path.Combine(UploadDir, UserId, $"{source.Id}_{safeFileName}");

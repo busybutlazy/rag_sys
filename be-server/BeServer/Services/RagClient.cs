@@ -21,9 +21,9 @@ public class RagClient(HttpClient http, IConfiguration config, IHttpContextAcces
             req.Headers.Add("X-Correlation-Id", correlationId);
     }
 
-    public async Task IngestAsync(string sourceId, string notebookId, string userId, string filePath, string mimeType)
+    public async Task IngestAsync(string sourceId, string notebookId, string userId, string filePath, string mimeType, RagRetrievalConfig? retrieval)
     {
-        var payload = new { source_id = sourceId, notebook_id = notebookId, user_id = userId, file_path = filePath, mime_type = mimeType };
+        var payload = new { source_id = sourceId, notebook_id = notebookId, user_id = userId, file_path = filePath, mime_type = mimeType, retrieval };
         var req = new HttpRequestMessage(HttpMethod.Post, "/ingest") { Content = JsonContent.Create(payload) };
         AddHeaders(req);
         var response = await http.SendAsync(req);
@@ -120,3 +120,12 @@ public record RagExperimentRecord(
     [property: JsonPropertyName("created_at")] string CreatedAt);
 public record ExperimentConfig(string[] Modes, int TopK = 5, double Alpha = 0.5);
 public record ExperimentRunRequest(string? Name, string[] Queries, ExperimentConfig? Config);
+public record RagRetrievalConfig(
+    [property: JsonPropertyName("retrieval_version_id")] string RetrievalVersionId,
+    [property: JsonPropertyName("chunk_size")] int ChunkSize,
+    [property: JsonPropertyName("chunk_overlap")] int ChunkOverlap,
+    [property: JsonPropertyName("embedding_model")] string EmbeddingModel,
+    [property: JsonPropertyName("embedding_dimensions")] int EmbeddingDimensions,
+    [property: JsonPropertyName("search_mode")] string SearchMode,
+    [property: JsonPropertyName("top_k")] int TopK,
+    [property: JsonPropertyName("hybrid_alpha")] double HybridAlpha);

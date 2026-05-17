@@ -7,7 +7,7 @@ interface AppShellProps {
 }
 
 export default function AppShell({ children }: AppShellProps) {
-  const { username, logout } = useAuth()
+  const { username, isDevAdmin, logout } = useAuth()
   const navigate = useNavigate()
   const [collapsed, setCollapsed] = useState(false)
 
@@ -44,6 +44,14 @@ export default function AppShell({ children }: AppShellProps) {
               >
                 Notebooks
               </NavLink>
+              {isDevAdmin && (
+                <NavLink
+                  to="/lab/retrieval-versions"
+                  className={({ isActive }) => `shell-link ${isActive ? 'shell-link-active' : ''}`}
+                >
+                  Lab
+                </NavLink>
+              )}
             </nav>
 
             <div className="shell-account">

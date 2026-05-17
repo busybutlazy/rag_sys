@@ -16,6 +16,8 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
     public DbSet<ChatRequest> ChatRequests { get; set; } = null!;
     public DbSet<RequestLog> RequestLogs { get; set; } = null!;
     public DbSet<SessionTask> SessionTasks { get; set; } = null!;
+    public DbSet<RetrievalPreset> RetrievalPresets { get; set; } = null!;
+    public DbSet<NotebookRetrievalVersion> NotebookRetrievalVersions { get; set; } = null!;
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -25,6 +27,7 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             e.Property(u => u.Id).HasMaxLength(36);
             e.Property(u => u.Username).HasMaxLength(64).IsRequired();
             e.Property(u => u.PasswordHash).HasMaxLength(255).IsRequired();
+            e.Property(u => u.IsDevAdmin).HasDefaultValue(false);
             e.HasIndex(u => u.Username).IsUnique();
             e.Property(u => u.CreatedAt).HasColumnType("datetime");
             e.Property(u => u.UpdatedAt).HasColumnType("datetime");
@@ -57,6 +60,7 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             e.Property(n => n.UserId).HasMaxLength(36).IsRequired();
             e.Property(n => n.Name).HasMaxLength(255).IsRequired();
             e.Property(n => n.Description).HasMaxLength(1000);
+            e.Property(n => n.ActiveRetrievalVersionId).HasMaxLength(36);
             e.Property(n => n.CreatedAt).HasColumnType("datetime");
             e.Property(n => n.UpdatedAt).HasColumnType("datetime");
             e.HasOne(n => n.User).WithMany().HasForeignKey(n => n.UserId).OnDelete(DeleteBehavior.Cascade);
@@ -75,6 +79,8 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             e.Property(s => s.OriginalContentType).HasMaxLength(128);
             e.Property(s => s.DetectedMimeType).HasMaxLength(128);
             e.Property(s => s.Status).HasMaxLength(32);
+            e.Property(s => s.ActiveRetrievalVersionId).HasMaxLength(36);
+            e.Property(s => s.LastIndexedRetrievalVersionId).HasMaxLength(36);
             e.Property(s => s.CreatedAt).HasColumnType("datetime");
             e.Property(s => s.UpdatedAt).HasColumnType("datetime");
             e.HasOne(s => s.User).WithMany().HasForeignKey(s => s.UserId).OnDelete(DeleteBehavior.Cascade);
@@ -181,6 +187,7 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             e.Property(r => r.AssistantMessageId).HasMaxLength(36);
             e.Property(r => r.Mode).HasMaxLength(32).IsRequired();
             e.Property(r => r.Model).HasMaxLength(128).IsRequired();
+            e.Property(r => r.RetrievalVersionId).HasMaxLength(36);
             e.Property(r => r.Status).HasMaxLength(32).IsRequired();
             e.Property(r => r.ContextSnapshotJson).HasColumnType("json");
             e.Property(r => r.Error).HasColumnType("text");
@@ -235,6 +242,39 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             e.HasIndex(t => new { t.SessionId, t.Status });
             e.HasIndex(t => t.CreatedFromRequestId);
             e.HasIndex(t => t.UpdatedFromRequestId);
+        });
+
+        modelBuilder.Entity<RetrievalPreset>(e =>
+        {
+            e.HasKey(p => p.Id);
+            e.Property(p => p.Id).HasMaxLength(36);
+            e.Property(p => p.Key).HasMaxLength(64).IsRequired();
+            e.Property(p => p.Name).HasMaxLength(128).IsRequired();
+            e.Property(p => p.Description).HasMaxLength(1000);
+            e.Property(p => p.EmbeddingModel).HasMaxLength(128).IsRequired();
+            e.Property(p => p.DefaultSearchMode).HasMaxLength(32).IsRequired();
+            e.Property(p => p.CreatedAt).HasColumnType("datetime");
+            e.Property(p => p.UpdatedAt).HasColumnType("datetime");
+            e.HasIndex(p => p.Key).IsUnique();
+        });
+
+        modelBuilder.Entity<NotebookRetrievalVersion>(e =>
+        {
+            e.HasKey(v => v.Id);
+            e.Property(v => v.Id).HasMaxLength(36);
+            e.Property(v => v.NotebookId).HasMaxLength(36).IsRequired();
+            e.Property(v => v.CreatedByUserId).HasMaxLength(36).IsRequired();
+            e.Property(v => v.ParentVersionId).HasMaxLength(36);
+            e.Property(v => v.OriginPresetId).HasMaxLength(36);
+            e.Property(v => v.EmbeddingModel).HasMaxLength(128).IsRequired();
+            e.Property(v => v.DefaultSearchMode).HasMaxLength(32).IsRequired();
+            e.Property(v => v.Notes).HasMaxLength(1000);
+            e.Property(v => v.CreatedAt).HasColumnType("datetime");
+            e.HasOne(v => v.Notebook).WithMany(n => n.RetrievalVersions).HasForeignKey(v => v.NotebookId).OnDelete(DeleteBehavior.Cascade);
+            e.HasOne(v => v.CreatedByUser).WithMany().HasForeignKey(v => v.CreatedByUserId).OnDelete(DeleteBehavior.Cascade);
+            e.HasIndex(v => v.NotebookId);
+            e.HasIndex(v => v.ParentVersionId);
+            e.HasIndex(v => v.OriginPresetId);
         });
     }
 }

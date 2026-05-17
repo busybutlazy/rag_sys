@@ -83,7 +83,7 @@ public class NotebookAndSearchControllerTests
         var accessor = new HttpContextAccessor { HttpContext = context.HttpContext };
         var config = TestConfig();
         var rag = new RagClient(new HttpClient(new FakeHandler()) { BaseAddress = new Uri("http://rag-server") }, config, accessor);
-        var controller = new NotebooksController(db, new CurrentUserAccessor(accessor), rag);
+        var controller = new NotebooksController(db, new CurrentUserAccessor(accessor), rag, new RetrievalVersionService(db));
         controller.ControllerContext = context;
         return controller;
     }
@@ -95,7 +95,7 @@ public class NotebookAndSearchControllerTests
         var accessor = new HttpContextAccessor { HttpContext = context.HttpContext };
         var currentUser = new CurrentUserAccessor(accessor);
         var rag = new RagClient(new HttpClient(new FakeHandler()) { BaseAddress = new Uri("http://rag-server") }, config, accessor);
-        var controller = new SearchController(new OwnershipService(db, currentUser), rag, currentUser);
+        var controller = new SearchController(new OwnershipService(db, currentUser), rag, currentUser, db);
         controller.ControllerContext = context;
         return controller;
     }

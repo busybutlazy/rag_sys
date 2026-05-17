@@ -8,6 +8,7 @@ public class ChatRequest
     public string? AssistantMessageId { get; set; }
     public string Mode { get; set; } = "chat";
     public string Model { get; set; } = "gpt-4o-mini";
+    public string? RetrievalVersionId { get; set; }
     public string Status { get; set; } = ChatRequestStatuses.Running;
     public string? ContextSnapshotJson { get; set; }
     public string? Error { get; set; }
