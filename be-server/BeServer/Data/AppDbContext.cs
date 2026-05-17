@@ -140,9 +140,11 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             e.Property(cs => cs.UpdatedAt).HasColumnType("datetime");
             e.HasOne(cs => cs.User).WithMany().HasForeignKey(cs => cs.UserId).OnDelete(DeleteBehavior.Cascade);
             e.HasOne(cs => cs.Notebook).WithMany(n => n.ChatSessions).HasForeignKey(cs => cs.NotebookId).OnDelete(DeleteBehavior.Cascade);
+            e.HasOne<SessionTask>().WithMany().HasForeignKey(cs => cs.ActiveTaskId).OnDelete(DeleteBehavior.SetNull);
             e.HasIndex(cs => cs.UserId);
             e.HasIndex(cs => cs.NotebookId);
             e.HasIndex(cs => new { cs.UserId, cs.NotebookId });
+            e.HasIndex(cs => cs.ActiveTaskId);
         });
 
         modelBuilder.Entity<ChatMessage>(e =>
@@ -163,9 +165,11 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             e.HasOne(m => m.Session).WithMany(s => s.Messages).HasForeignKey(m => m.SessionId).OnDelete(DeleteBehavior.Cascade);
             e.HasOne(m => m.User).WithMany().HasForeignKey(m => m.UserId).OnDelete(DeleteBehavior.Cascade);
             e.HasOne(m => m.Notebook).WithMany().HasForeignKey(m => m.NotebookId).OnDelete(DeleteBehavior.Cascade);
+            e.HasOne<ChatRequest>().WithMany().HasForeignKey(m => m.RequestId).OnDelete(DeleteBehavior.SetNull);
             e.HasIndex(m => m.SessionId);
             e.HasIndex(m => new { m.SessionId, m.Sequence }).IsUnique();
             e.HasIndex(m => new { m.UserId, m.NotebookId });
+            e.HasIndex(m => m.RequestId);
         });
 
         modelBuilder.Entity<ChatRequest>(e =>
@@ -207,6 +211,7 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             e.HasIndex(l => l.ChatRequestId);
             e.HasIndex(l => l.SessionId);
             e.HasIndex(l => new { l.Service, l.Operation });
+            e.HasIndex(l => l.CreatedAt);
         });
 
         modelBuilder.Entity<SessionTask>(e =>
@@ -224,8 +229,12 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             e.Property(t => t.UpdatedAt).HasColumnType("datetime");
             e.Property(t => t.CompletedAt).HasColumnType("datetime");
             e.HasOne(t => t.Session).WithMany(s => s.Tasks).HasForeignKey(t => t.SessionId).OnDelete(DeleteBehavior.Cascade);
+            e.HasOne<ChatRequest>().WithMany().HasForeignKey(t => t.CreatedFromRequestId).OnDelete(DeleteBehavior.SetNull);
+            e.HasOne<ChatRequest>().WithMany().HasForeignKey(t => t.UpdatedFromRequestId).OnDelete(DeleteBehavior.SetNull);
             e.HasIndex(t => t.SessionId);
             e.HasIndex(t => new { t.SessionId, t.Status });
+            e.HasIndex(t => t.CreatedFromRequestId);
+            e.HasIndex(t => t.UpdatedFromRequestId);
         });
     }
 }

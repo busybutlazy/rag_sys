@@ -6,7 +6,7 @@ public class SessionTask
     public string SessionId { get; set; } = null!;
     public string Title { get; set; } = null!;
     public string? Summary { get; set; }
-    public string Status { get; set; } = "active";
+    public string Status { get; set; } = SessionTaskStatuses.Active;
     public int SortOrder { get; set; }
     public string? StateJson { get; set; }
     public string? CreatedFromRequestId { get; set; }

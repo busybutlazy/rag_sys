@@ -28,27 +28,42 @@ services:
       test: ["CMD", "mysqladmin", "ping", "-h", "127.0.0.1", "--protocol=tcp", "-u", "root", "-p${MYSQL_ROOT_PASSWORD}"]
       interval: 10s
       timeout: 5s
-      retries: 5
+      retries: 12
+      start_period: 60s
 
   arangodb:
     image: arangodb:3.12
     command: ["arangod", "--vector-index"]
     environment:
       ARANGO_ROOT_PASSWORD: ${ARANGO_ROOT_PASSWORD}
-      ARANGO_DB: ${ARANGO_DB}
-      ARANGO_USER: ${ARANGO_USER}
-      ARANGO_PASSWORD: ${ARANGO_PASSWORD}
     volumes:
       - arango_data:/var/lib/arangodb3
-      - ./db/arango:/docker-entrypoint-initdb.d:ro
     networks:
       - rag_net
     healthcheck:
-      test: ["CMD-SHELL", "arangosh --server.endpoint tcp://127.0.0.1:8529 --server.username root --server.password \"$${ARANGO_ROOT_PASSWORD}\" --javascript.execute-string \"db._version()\" >/dev/null"]
+      test: ["CMD-SHELL", "arangosh --server.endpoint tcp://127.0.0.1:8529 --server.username root --server.password \"$${ARANGO_ROOT_PASSWORD}\" --javascript.execute-string \"db._version()\" >/dev/null 2>&1"]
       interval: 15s
       timeout: 10s
-      retries: 10
-      start_period: 30s
+      retries: 12
+      start_period: 60s
+
+  arango-init:
+    image: curlimages/curl:latest
+    entrypoint: ["/bin/sh", "/init/init-arango.sh"]
+    environment:
+      ARANGO_ROOT_PASSWORD: ${ARANGO_ROOT_PASSWORD}
+      ARANGO_DB: ${ARANGO_DB}
+      ARANGO_USER: ${ARANGO_USER}
+      ARANGO_PASSWORD: ${ARANGO_PASSWORD}
+      EMBEDDING_DIMENSIONS: ${EMBEDDING_DIMENSIONS:-1536}
+    volumes:
+      - ./db/arango:/init:ro
+    networks:
+      - rag_net
+    depends_on:
+      arangodb:
+        condition: service_healthy
+    restart: "no"
 
   # ── Application Services ─────────────────────────
   be-server:
@@ -134,8 +149,8 @@ services:
     networks:
       - rag_net
     depends_on:
-      arangodb:
-        condition: service_healthy
+      arango-init:
+        condition: service_completed_successfully
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8003/health"]
       interval: 10s

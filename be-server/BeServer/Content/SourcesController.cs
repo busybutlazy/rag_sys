@@ -136,7 +136,7 @@ public class SourcesController(
             OriginalContentType = originalContentType,
             DetectedMimeType = detectedMimeType,
             FileSizeBytes = file.Length,
-            Status = IngestionJobStatuses.Queued,
+            Status = SourceStatuses.Queued,
         };
 
         // LOGIC-02: persist DB record first; then write file
@@ -155,7 +155,7 @@ public class SourcesController(
         }
         catch (Exception ex)
         {
-            source.Status = IngestionJobStatuses.Failed;
+            source.Status = SourceStatuses.Failed;
             source.UpdatedAt = DateTime.UtcNow;
             var failedJob = new IngestionJob
             {
@@ -395,7 +395,7 @@ public class SourcesController(
             UpdatedAt = now,
         };
         db.IngestionJobs.Add(newJob);
-        source.Status = IngestionJobStatuses.Queued;
+        source.Status = SourceStatuses.Queued;
         source.UpdatedAt = now;
         await db.SaveChangesAsync();
 

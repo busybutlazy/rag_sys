@@ -14,7 +14,14 @@ def ensure_vector_index(db) -> None:
     col = db.collection("chunks")
     existing = {idx["type"] for idx in col.indexes()}
     if "vector" not in existing:
-        for attempt in range(30):
+        document_count = col.count()
+        if document_count == 0:
+            return
+
+        # ArangoDB trains vector indexes from existing embeddings. nLists must
+        # not exceed the number of documents available for training.
+        n_lists = min(2, document_count)
+        for attempt in range(60):
             try:
                 col.add_index({
                     "type": "vector",
@@ -22,14 +29,14 @@ def ensure_vector_index(db) -> None:
                     "params": {
                         "metric": "cosine",
                         "dimension": DIMENSIONS,
-                        "nLists": 2,
+                        "nLists": n_lists,
                     },
                 })
                 return
             except IndexCreateError as exc:
-                if "vector index not ready" not in str(exc) or attempt == 29:
+                if "vector index not ready" not in str(exc) or attempt == 59:
                     raise
-                time.sleep(5)
+                time.sleep(10)
 
 
 def ensure_search_view(db) -> None:
@@ -74,6 +81,7 @@ def store_chunks(
     ]
     if docs:
         col.insert_many(docs)
+        ensure_vector_index(db)
 
 
 def delete_chunks(db, source_id: str) -> None:
@@ -89,6 +97,11 @@ def search_vector(
     notebook_id: str,
     top_k: int = 5,
 ) -> list[dict]:
+    col = db.collection("chunks")
+    existing = {idx["type"] for idx in col.indexes()}
+    if "vector" not in existing:
+        return []
+
     aql = """
     FOR doc IN chunks
       FILTER doc.notebook_id == @notebook_id
