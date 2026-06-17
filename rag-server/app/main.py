@@ -145,13 +145,16 @@ async def search_vector(
     notebook_id: str = Query(..., description="Notebook to search within"),
     user_id: str = Query(..., description="Owner scope for the notebook"),
     top_k: int = Query(default=None, ge=1, le=20),
+    retrieval_version_id: str | None = Query(default=None, description="Optional retrieval version scope"),
     x_internal_secret: str | None = Header(default=None),
 ):
     _check_secret(x_internal_secret)
     metrics.increment("search_vector")
     effective_top_k = top_k if top_k is not None else _cfg.top_k
     query_embedding = await embedder.embed(q)
-    results = vector_store.search_vector(get_db(), query_embedding, notebook_id, user_id, effective_top_k)
+    results = vector_store.search_vector(
+        get_db(), query_embedding, notebook_id, user_id, effective_top_k, retrieval_version_id
+    )
     return SearchResponse(results=results)
 
 
@@ -161,12 +164,13 @@ async def search_bm25_endpoint(
     notebook_id: str = Query(..., description="Notebook to search within"),
     user_id: str = Query(..., description="Owner scope for the notebook"),
     top_k: int = Query(default=None, ge=1, le=20),
+    retrieval_version_id: str | None = Query(default=None, description="Optional retrieval version scope"),
     x_internal_secret: str | None = Header(default=None),
 ):
     _check_secret(x_internal_secret)
     metrics.increment("search_bm25")
     effective_top_k = top_k if top_k is not None else _cfg.top_k
-    results = vector_store.search_bm25(get_db(), q, notebook_id, user_id, effective_top_k)
+    results = vector_store.search_bm25(get_db(), q, notebook_id, user_id, effective_top_k, retrieval_version_id)
     return SearchResponse(results=results)
 
 
@@ -177,6 +181,7 @@ async def search_hybrid_endpoint(
     user_id: str = Query(..., description="Owner scope for the notebook"),
     top_k: int = Query(default=None, ge=1, le=20),
     alpha: float = Query(default=None, ge=0.0, le=1.0, description="Vector weight (1-alpha goes to BM25)"),
+    retrieval_version_id: str | None = Query(default=None, description="Optional retrieval version scope"),
     x_internal_secret: str | None = Header(default=None),
 ):
     _check_secret(x_internal_secret)
@@ -184,7 +189,9 @@ async def search_hybrid_endpoint(
     effective_top_k = top_k if top_k is not None else _cfg.top_k
     effective_alpha = alpha if alpha is not None else _cfg.hybrid_alpha
     query_embedding = await embedder.embed(q)
-    results = vector_store.search_hybrid(get_db(), query_embedding, q, notebook_id, user_id, effective_top_k, effective_alpha)
+    results = vector_store.search_hybrid(
+        get_db(), query_embedding, q, notebook_id, user_id, effective_top_k, effective_alpha, retrieval_version_id
+    )
     return SearchResponse(results=results)
 
 
@@ -194,15 +201,18 @@ async def search_benchmark(
     notebook_id: str = Query(..., description="Notebook to search within"),
     user_id: str = Query(..., description="Owner scope for the notebook"),
     top_k: int = Query(default=None, ge=1, le=20),
+    retrieval_version_id: str | None = Query(default=None, description="Optional retrieval version scope"),
     x_internal_secret: str | None = Header(default=None),
 ):
     _check_secret(x_internal_secret)
     effective_top_k = top_k if top_k is not None else _cfg.top_k
     query_embedding = await embedder.embed(q)
     db = get_db()
-    vec_results = vector_store.search_vector(db, query_embedding, notebook_id, user_id, effective_top_k)
-    bm25_results = vector_store.search_bm25(db, q, notebook_id, user_id, effective_top_k)
-    hybrid_results = vector_store.search_hybrid(db, query_embedding, q, notebook_id, user_id, effective_top_k)
+    vec_results = vector_store.search_vector(db, query_embedding, notebook_id, user_id, effective_top_k, retrieval_version_id)
+    bm25_results = vector_store.search_bm25(db, q, notebook_id, user_id, effective_top_k, retrieval_version_id)
+    hybrid_results = vector_store.search_hybrid(
+        db, query_embedding, q, notebook_id, user_id, effective_top_k, retrieval_version_id=retrieval_version_id
+    )
     return BenchmarkResponse(
         query=q,
         vector=vec_results,
@@ -264,10 +274,13 @@ async def get_document_content(
     notebook_id: str = Query(..., description="Notebook scope for the source"),
     user_id: str = Query(..., description="Owner scope for the source"),
     max_chars: int = Query(default=12000, ge=1000, le=50000),
+    retrieval_version_id: str | None = Query(default=None, description="Optional retrieval version scope"),
     x_internal_secret: str | None = Header(default=None),
 ):
     _check_secret(x_internal_secret)
-    content = vector_store.get_source_content(get_db(), source_id, notebook_id, user_id, max_chars)
+    content = vector_store.get_source_content(
+        get_db(), source_id, notebook_id, user_id, max_chars, retrieval_version_id
+    )
     if not content["chunks"]:
         raise HTTPException(status_code=404, detail="Source content not found")
     return SourceContentResponse(**content)

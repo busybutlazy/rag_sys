@@ -67,11 +67,31 @@ public class RagClient(HttpClient http, IConfiguration config, IHttpContextAcces
         response.EnsureSuccessStatusCode();
     }
 
-    public Task<RagSearchResponse> SearchAsync(string query, string notebookId, string userId, string mode, int topK) =>
-        GetAsync<RagSearchResponse>($"/search/{mode}?q={Uri.EscapeDataString(query)}&notebook_id={notebookId}&user_id={userId}&top_k={topK}");
+    public Task<RagSearchResponse> SearchAsync(
+        string query,
+        string notebookId,
+        string userId,
+        string mode,
+        int topK,
+        string? retrievalVersionId = null,
+        double? alpha = null)
+    {
+        var versionQuery = string.IsNullOrWhiteSpace(retrievalVersionId)
+            ? ""
+            : $"&retrieval_version_id={Uri.EscapeDataString(retrievalVersionId)}";
+        var alphaQuery = alpha is null ? "" : $"&alpha={alpha.Value}";
+        return GetAsync<RagSearchResponse>(
+            $"/search/{mode}?q={Uri.EscapeDataString(query)}&notebook_id={notebookId}&user_id={userId}&top_k={topK}{versionQuery}{alphaQuery}");
+    }
 
-    public Task<RagBenchmarkResponse> BenchmarkAsync(string query, string notebookId, string userId, int topK) =>
-        GetAsync<RagBenchmarkResponse>($"/search/benchmark?q={Uri.EscapeDataString(query)}&notebook_id={notebookId}&user_id={userId}&top_k={topK}");
+    public Task<RagBenchmarkResponse> BenchmarkAsync(string query, string notebookId, string userId, int topK, string? retrievalVersionId = null)
+    {
+        var versionQuery = string.IsNullOrWhiteSpace(retrievalVersionId)
+            ? ""
+            : $"&retrieval_version_id={Uri.EscapeDataString(retrievalVersionId)}";
+        return GetAsync<RagBenchmarkResponse>(
+            $"/search/benchmark?q={Uri.EscapeDataString(query)}&notebook_id={notebookId}&user_id={userId}&top_k={topK}{versionQuery}");
+    }
 
     public async Task<RagExperimentRecord> RunExperimentAsync(string notebookId, string userId, ExperimentRunRequest req)
     {
@@ -114,6 +134,7 @@ public class RagClient(HttpClient http, IConfiguration config, IHttpContextAcces
 public record RagChunkResult(
     [property: JsonPropertyName("source_id")] string SourceId,
     [property: JsonPropertyName("chunk_index")] int ChunkIndex,
+    [property: JsonPropertyName("retrieval_version_id")] string? RetrievalVersionId,
     string Text);
 public record RagSearchResponse(List<RagChunkResult> Results);
 public record RagBenchmarkResponse(

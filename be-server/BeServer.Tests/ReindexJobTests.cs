@@ -6,6 +6,7 @@ using BeServer.Services;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Configuration;
 using Xunit;
 
 namespace BeServer.Tests;
@@ -155,6 +156,45 @@ public class ReindexJobTests
     }
 
     [Fact]
+    public async Task PruneVersionPayload_RejectsActiveVersion()
+    {
+        await using var db = CreateDb();
+        var user = await SeedUser(db, isDevAdmin: true);
+        var (notebook, version) = await SeedNotebookWithVersion(db, user.Id);
+        var controller = CreateController(db, user.Id);
+        var rag = CreateRagClient(controller.ControllerContext.HttpContext);
+
+        var result = await controller.PruneVersionPayload(notebook.Id, version.Id, rag);
+
+        Assert.IsType<BadRequestObjectResult>(result);
+    }
+
+    [Fact]
+    public async Task PruneVersionPayload_AllowsInactiveVersion()
+    {
+        await using var db = CreateDb();
+        var user = await SeedUser(db, isDevAdmin: true);
+        var (notebook, _) = await SeedNotebookWithVersion(db, user.Id);
+        var inactive = new NotebookRetrievalVersion
+        {
+            NotebookId = notebook.Id,
+            CreatedByUserId = user.Id,
+            ChunkSize = 900,
+            ChunkOverlap = 100,
+            EmbeddingModel = "m",
+            EmbeddingDimensions = 3,
+        };
+        db.NotebookRetrievalVersions.Add(inactive);
+        await db.SaveChangesAsync();
+        var controller = CreateController(db, user.Id);
+        var rag = CreateRagClient(controller.ControllerContext.HttpContext);
+
+        var result = await controller.PruneVersionPayload(notebook.Id, inactive.Id, rag);
+
+        Assert.IsType<NoContentResult>(result);
+    }
+
+    [Fact]
     public async Task QueueReindex_WrongNotebook_ReturnsNotFound()
     {
         await using var db = CreateDb();
@@ -223,5 +263,25 @@ public class ReindexJobTests
         {
             ControllerContext = context,
         };
+    }
+
+    private static RagClient CreateRagClient(HttpContext httpContext)
+    {
+        var accessor = new HttpContextAccessor { HttpContext = httpContext };
+        return new RagClient(
+            new HttpClient(new FakeHandler()) { BaseAddress = new Uri("http://rag-server") },
+            new Microsoft.Extensions.Configuration.ConfigurationBuilder()
+                .AddInMemoryCollection(new Dictionary<string, string?>
+                {
+                    ["RAG_INTERNAL_SECRET"] = "this_is_a_long_test_secret_for_rag_boundary",
+                })
+                .Build(),
+            accessor);
+    }
+
+    private sealed class FakeHandler : HttpMessageHandler
+    {
+        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken) =>
+            Task.FromResult(new HttpResponseMessage(System.Net.HttpStatusCode.NoContent));
     }
 }

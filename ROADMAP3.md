@@ -261,7 +261,7 @@ Reasoning: the Lab needs trustworthy ownership, versioning, and reproducibility 
   - [x] allow rollback / promotion
 - [x] Extend RAG payload:
   - [x] retrieval-version scoped chunks
-  - [ ] search by requested retrieval version — deferred to Phase 18 (needed for A/B comparison queries)
+  - [x] search by requested retrieval version — completed in Phase 18 for product pinning and Lab A/B queries
   - [x] cleanup stale version payloads only after safe promotion
 - [x] Add `/lab/reindex` UI:
   - [x] queue jobs
@@ -279,34 +279,53 @@ Reasoning: the Lab needs trustworthy ownership, versioning, and reproducibility 
 
 **Goal:** Compare retrieval versions on the same notebook and query set.
 
-- [ ] Add evaluation dataset model:
-  - [ ] named datasets
-  - [ ] notebook scope
-  - [ ] reusable query sets
-  - [ ] optional expected answer / gold source notes
-- [ ] Add evaluation run model:
-  - [ ] dataset id
-  - [ ] retrieval version A
-  - [ ] retrieval version B
-  - [ ] search mode set
-  - [ ] timestamps / actor
-- [ ] Add retrieval metrics:
-  - [ ] latency
-  - [ ] overlap@k
-  - [ ] source overlap
-  - [ ] rank deltas
-  - [ ] result-count deltas
-- [ ] Add `/lab/retrieval-bench` UI:
-  - [ ] ad hoc query compare
-  - [ ] dataset runner
-  - [ ] side-by-side chunk diff
-  - [ ] result history
+- [x] Add evaluation dataset model:
+  - [x] named datasets
+  - [x] notebook scope
+  - [x] reusable query sets
+  - [x] optional expected answer / gold source notes
+- [x] Add evaluation run model:
+  - [x] dataset id
+  - [x] retrieval version A
+  - [x] retrieval version B
+  - [x] search mode set
+  - [x] timestamps / actor
+- [x] Add retrieval metrics:
+  - [x] latency
+  - [x] overlap@k
+  - [x] source overlap
+  - [x] rank deltas
+  - [x] result-count deltas
+- [x] Add `/lab/retrieval-bench` UI:
+  - [x] ad hoc query compare
+  - [x] dataset runner
+  - [x] side-by-side chunk diff
+  - [x] result history
 
 **Deliverable:** The owner can answer, with evidence, whether one retrieval version beats another on their own corpus.
 
+**Current status (2026-05-17):** Implemented on `phase-18-retrieval-benchmarks-ab-comparison`. Retrieval search is now version-scoped, ordinary product search pins to the active notebook retrieval version, successful reindex keeps prior payloads for comparison, and inactive payloads can be pruned explicitly from Lab. The system now includes notebook-scoped evaluation datasets, immutable run/result snapshots, overlap and rank-delta metrics, ad hoc compare and dataset-run APIs, plus a first `/lab/retrieval-bench` UI with side-by-side inspection and run history.
+
 ---
 
-## Phase 19 - Human Relevance Labels and Judge Evaluation
+## Phase 19 - GraphRAG Foundations
+
+**Goal:** Add an opt-in entity/fact graph layer and make graph-augmented retrieval directly A/B-comparable against vector/BM25/hybrid using the Phase 18 comparison engine.
+
+Promoted ahead of relevance labels and agent packages per `docs/POSITIONING.md` — replaces the previous vague "Phase 21 - GraphRAG Readiness" placeholder with a concrete plan. Full detail in `docs/superpowers/plans/phase-19-graphrag-foundations.md`.
+
+- [ ] Add graph schema to Arango: `entities`, `facts` vertices + `chunk_mentions_entity`, `fact_has_participant`, `fact_supported_by_chunk` edges, scoped by `notebook_id` / `user_id` / `retrieval_version_id` like every existing collection.
+- [ ] Add `EnableGraph` (default `false`) and graph budget fields to `NotebookRetrievalVersion`.
+- [ ] Add LLM-confined extraction endpoint in `ai-server` (`LLMGateway`-based); RAG server stays deterministic (resolve + assemble + write only).
+- [ ] Wire extraction into existing `IngestionJobWorker` / `ReindexJobWorker` as a best-effort post-ingest step that never blocks normal vector/BM25 availability on failure.
+- [ ] Add `graph_hybrid` search mode: vector + BM25 RRF fusion plus a graph branch seeded from top vector hits.
+- [ ] Extend Phase 18's comparison metrics with `graph_hit_rate` and `fact_coverage`; add `graph_hybrid` to the existing `/lab/retrieval-bench` mode picker (no new UI page).
+
+**Deliverable:** The owner can fork a graph-enabled retrieval version, reindex a notebook, and get reproducible evidence — via the existing retrieval bench — of whether graph-augmented retrieval beats plain hybrid on their own corpus.
+
+---
+
+## Phase 20 - Human Relevance Labels and Judge Evaluation
 
 **Goal:** Turn comparisons into evaluation, not just inspection.
 
@@ -338,7 +357,7 @@ Reasoning: the Lab needs trustworthy ownership, versioning, and reproducibility 
 
 ---
 
-## Phase 20 - Agent Packages, Prompt Versions, and Playground
+## Phase 21 - Agent Packages, Prompt Versions, and Playground
 
 **Goal:** Make agents installable, replaceable components whose behavior can be versioned and compared on top of controlled retrieval.
 
@@ -401,24 +420,6 @@ Reasoning: the Lab needs trustworthy ownership, versioning, and reproducibility 
 
 ---
 
-## Phase 21 - GraphRAG Readiness
-
-**Goal:** Prepare the retrieval plane for graph experiments without forcing GraphRAG into the main product prematurely.
-
-- [ ] Finalize ownership and lineage conventions across Arango documents.
-- [ ] Define graph candidate entities:
-  - [ ] entities
-  - [ ] relations
-  - [ ] mentions
-  - [ ] source/chunk backlinks
-- [ ] Add graph extraction experiments behind Lab only.
-- [ ] Add graph-version metadata parallel to retrieval / prompt versions.
-- [ ] Compare vector / sparse / hybrid / graph-augmented retrieval in Lab.
-
-**Deliverable:** GraphRAG can be explored as a controlled retrieval variant without destabilizing the personal knowledge product.
-
----
-
 ## Suggested Implementation Order
 
 | Order | Work | Why |
@@ -427,9 +428,9 @@ Reasoning: the Lab needs trustworthy ownership, versioning, and reproducibility 
 | 2 | Phase 16 | Versioning is the spine of every later Lab feature |
 | 3 | Phase 17 | A/B is only meaningful if versions can be rebuilt safely |
 | 4 | Phase 18 | Comparison becomes useful once versioned corpora exist |
-| 5 | Phase 19 | Evaluation should be layered on top of stable comparisons |
-| 6 | Phase 20 | Prompt experiments become meaningful after retrieval is controlled |
-| 7 | Phase 21 | GraphRAG comes after the evaluation machinery can judge it |
+| 5 | Phase 19 | GraphRAG is the project's current positioning priority (`docs/POSITIONING.md`) and reuses the Phase 18 comparison engine directly |
+| 6 | Phase 20 | Evaluation/judge tooling is layered on top once there's a graph variant worth judging |
+| 7 | Phase 21 | Prompt/agent experiments come last — they need controlled retrieval underneath them |
 
 ---
 

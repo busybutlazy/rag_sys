@@ -56,9 +56,31 @@ class VectorStoreTests(unittest.TestCase):
         self.assertIn("FILTER doc.notebook_id == @notebook_id", db.aql.last_query)
         self.assertIn("AND doc.user_id == @user_id", db.aql.last_query)
         self.assertEqual(
-            {"notebook_id": "nb-1", "user_id": "user-1", "query_vec": [0.1, 0.2], "top_k": 7},
+            {
+                "notebook_id": "nb-1",
+                "user_id": "user-1",
+                "query_vec": [0.1, 0.2],
+                "top_k": 7,
+                "retrieval_version_id": None,
+            },
             db.aql.last_bind_vars,
         )
+
+    def test_search_vector_can_scope_retrieval_version(self):
+        db = FakeDb()
+
+        vector_store.search_vector(db, [0.1, 0.2], "nb-1", "user-1", 7, "rv-a")
+
+        self.assertIn("doc.retrieval_version_id == @retrieval_version_id", db.aql.last_query)
+        self.assertEqual("rv-a", db.aql.last_bind_vars["retrieval_version_id"])
+
+    def test_search_bm25_can_scope_retrieval_version(self):
+        db = FakeDb()
+
+        vector_store.search_bm25(db, "hello", "nb-1", "user-1", 5, "rv-b")
+
+        self.assertIn("doc.retrieval_version_id == @retrieval_version_id", db.aql.last_query)
+        self.assertEqual("rv-b", db.aql.last_bind_vars["retrieval_version_id"])
 
     def test_search_vector_returns_empty_before_first_vector_index(self):
         db = FakeDb(indexes=[])
@@ -97,6 +119,7 @@ class VectorStoreTests(unittest.TestCase):
 
         fields = db.created_view["properties"]["links"]["chunks"]["fields"]
         self.assertIn("user_id", fields)
+        self.assertIn("retrieval_version_id", fields)
 
     def test_delete_chunks_without_version_deletes_all_for_source(self):
         db = FakeDb()
