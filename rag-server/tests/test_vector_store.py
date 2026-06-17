@@ -18,8 +18,15 @@ class FakeDb:
     def __init__(self, indexes=None, document_count=1):
         self.aql = FakeAql()
         self._collection = FakeCollection(indexes=indexes, document_count=document_count)
+        self._named_collections: dict[str, FakeCollection] = {}
+        self._existing_collections: set[str] = set()
+        self._existing_graphs: set[str] = set()
+        self.created_collections: list[tuple[str, bool]] = []
+        self.created_graphs: list[dict] = []
 
     def collection(self, name):
+        if name in self._named_collections:
+            return self._named_collections[name]
         self._collection.name = name
         return self._collection
 
@@ -28,6 +35,20 @@ class FakeDb:
 
     def create_view(self, **kwargs):
         self.created_view = kwargs
+
+    def has_collection(self, name):
+        return name in self._existing_collections
+
+    def create_collection(self, name, edge=False):
+        self._existing_collections.add(name)
+        self.created_collections.append((name, edge))
+
+    def has_graph(self, name):
+        return name in self._existing_graphs
+
+    def create_graph(self, name, edge_definitions):
+        self._existing_graphs.add(name)
+        self.created_graphs.append({"name": name, "edge_definitions": edge_definitions})
 
 
 class FakeCollection:
@@ -186,6 +207,72 @@ class VectorStoreTests(unittest.TestCase):
         self.assertIn("doc.source_id == @sid", db.aql.last_query)
         self.assertNotIn("retrieval_version_id", db.aql.last_query)
         self.assertEqual({"sid": "src-1", "uid": "user-1"}, db.aql.last_bind_vars)
+
+    def test_ensure_collections_creates_graph_vertex_and_edge_collections(self):
+        db = FakeDb()
+
+        vector_store.ensure_collections(db)
+
+        for name in ("documents", "chunks", "notebooks", "experiments", "entities", "facts"):
+            self.assertIn((name, False), db.created_collections)
+        for name in ("chunk_mentions_entity", "fact_has_participant", "fact_supported_by_chunk"):
+            self.assertIn((name, True), db.created_collections)
+
+    def test_ensure_collections_is_idempotent(self):
+        db = FakeDb()
+
+        vector_store.ensure_collections(db)
+        vector_store.ensure_collections(db)
+
+        self.assertEqual(len(db.created_collections), len(set(db.created_collections)))
+
+    def test_ensure_knowledge_graph_creates_graph_once(self):
+        db = FakeDb()
+
+        vector_store.ensure_knowledge_graph(db)
+        vector_store.ensure_knowledge_graph(db)
+
+        self.assertEqual(1, len(db.created_graphs))
+        edge_collections = {e["edge_collection"] for e in db.created_graphs[0]["edge_definitions"]}
+        self.assertEqual(
+            {"chunk_mentions_entity", "fact_has_participant", "fact_supported_by_chunk"},
+            edge_collections,
+        )
+
+    def test_ensure_graph_indexes_adds_persistent_index_on_entities_and_facts(self):
+        db = FakeDb(indexes=[])
+        entities_col = FakeCollection(indexes=[])
+        facts_col = FakeCollection(indexes=[])
+        db._named_collections = {"entities": entities_col, "facts": facts_col}
+
+        vector_store.ensure_graph_indexes(db)
+
+        for col in (entities_col, facts_col):
+            self.assertEqual(1, len(col.added_indexes))
+            self.assertEqual(["notebook_id", "retrieval_version_id"], col.added_indexes[0]["fields"])
+
+    def test_ensure_graph_indexes_is_idempotent(self):
+        db = FakeDb()
+        existing = [{"type": "persistent", "fields": ["notebook_id", "retrieval_version_id"]}]
+        entities_col = FakeCollection(indexes=existing)
+        facts_col = FakeCollection(indexes=existing)
+        db._named_collections = {"entities": entities_col, "facts": facts_col}
+
+        vector_store.ensure_graph_indexes(db)
+
+        self.assertEqual([], entities_col.added_indexes)
+        self.assertEqual([], facts_col.added_indexes)
+
+    def test_ensure_entities_view_indexes_canonical_name_and_aliases(self):
+        db = FakeDb()
+
+        vector_store.ensure_entities_view(db)
+
+        fields = db.created_view["properties"]["links"]["entities"]["fields"]
+        self.assertIn("canonical_name", fields)
+        self.assertIn("aliases", fields)
+        self.assertIn("notebook_id", fields)
+        self.assertIn("retrieval_version_id", fields)
 
     def test_delete_version_chunks_filters_by_notebook_and_version(self):
         db = FakeDb()

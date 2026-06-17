@@ -36,8 +36,11 @@ def _check_secret(x_internal_secret: str | None) -> None:
 async def lifespan(_: FastAPI):
     db = get_db()
     vector_store.ensure_collections(db)
+    vector_store.ensure_knowledge_graph(db)
+    vector_store.ensure_graph_indexes(db)
     vector_store.ensure_vector_index(db)
     vector_store.ensure_search_view(db)
+    vector_store.ensure_entities_view(db)
     yield
 
 

@@ -124,14 +124,14 @@ No new tables. No new UI surface beyond adding `graph_hybrid` to the existing mo
 
 ### Gate A — Graph schema foundation
 
-- [ ] Add `entities`, `facts` vertex collections and `chunk_mentions_entity`, `fact_has_participant`, `fact_supported_by_chunk` edge collections to `vector_store.ensure_collections`.
-- [ ] Add a named graph (e.g. `notebook_knowledge_graph`) joining the new collections, mirroring `graph`'s `knowledge_graph`.
-- [ ] Add persistent indexes on `(notebook_id, retrieval_version_id)` for `entities` and `facts`.
-- [ ] Add `entities_search_view` (ArangoSearch, BM25 over `canonical_name`/`aliases`) for keyword entity lookup — explicitly **not** vector search on entities in v1, matching `graph`'s own current limitation.
+- [x] Add `entities`, `facts` vertex collections and `chunk_mentions_entity`, `fact_has_participant`, `fact_supported_by_chunk` edge collections to `vector_store.ensure_collections`.
+- [x] Add a named graph (`notebook_knowledge_graph`) joining the new collections, mirroring `graph`'s `knowledge_graph`.
+- [x] Add persistent indexes on `(notebook_id, retrieval_version_id)` for `entities` and `facts`.
+- [x] Add an ArangoSearch view (BM25 over `canonical_name`/`aliases`) for keyword entity lookup — explicitly **not** vector search on entities in v1, matching `graph`'s own current limitation. Named `entities_view` rather than `entities_search_view` to match the existing `chunks_view` naming convention in this codebase.
 
 **Acceptance**
-- [ ] Fresh deployment creates all 5 new collections + view + named graph without affecting existing `documents`/`chunks`/`notebooks`/`experiments`.
-- [ ] Every written vertex/edge carries `notebook_id` + `user_id` + `retrieval_version_id`.
+- [x] Fresh deployment creates all 5 new collections + view + named graph without affecting existing `documents`/`chunks`/`notebooks`/`experiments`. (`ensure_collections`/`ensure_knowledge_graph`/`ensure_graph_indexes`/`ensure_entities_view` are all additive and idempotent; 8 new unit tests cover creation + idempotency in `rag-server/tests/test_vector_store.py`.)
+- [ ] Every written vertex/edge carries `notebook_id` + `user_id` + `retrieval_version_id`. (Deferred to Gate B — nothing writes to these collections yet.)
 
 ### Gate B — Extraction pipeline wired through existing job seams
 

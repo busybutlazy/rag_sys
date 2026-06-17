@@ -3,11 +3,77 @@ import time
 from arango.exceptions import IndexCreateError
 from app.embedder import DIMENSIONS
 
+KNOWLEDGE_GRAPH_NAME = "notebook_knowledge_graph"
+
+# Edge definitions for the opt-in entity/fact graph layer (Phase 19). Inert
+# until something writes mentions/facts into it — see
+# docs/superpowers/plans/phase-19-graphrag-foundations.md.
+_GRAPH_EDGE_DEFINITIONS = [
+    {
+        "edge_collection": "chunk_mentions_entity",
+        "from_vertex_collections": ["chunks"],
+        "to_vertex_collections": ["entities"],
+    },
+    {
+        "edge_collection": "fact_has_participant",
+        "from_vertex_collections": ["facts"],
+        "to_vertex_collections": ["entities"],
+    },
+    {
+        "edge_collection": "fact_supported_by_chunk",
+        "from_vertex_collections": ["facts"],
+        "to_vertex_collections": ["chunks"],
+    },
+]
+
 
 def ensure_collections(db) -> None:
-    for name in ["documents", "chunks", "notebooks", "experiments"]:
+    for name in ["documents", "chunks", "notebooks", "experiments", "entities", "facts"]:
         if not db.has_collection(name):
             db.create_collection(name)
+    for edge_def in _GRAPH_EDGE_DEFINITIONS:
+        name = edge_def["edge_collection"]
+        if not db.has_collection(name):
+            db.create_collection(name, edge=True)
+
+
+def ensure_knowledge_graph(db) -> None:
+    if not db.has_graph(KNOWLEDGE_GRAPH_NAME):
+        db.create_graph(KNOWLEDGE_GRAPH_NAME, edge_definitions=_GRAPH_EDGE_DEFINITIONS)
+
+
+def ensure_graph_indexes(db) -> None:
+    fields = ["notebook_id", "retrieval_version_id"]
+    for name in ("entities", "facts"):
+        col = db.collection(name)
+        existing = {tuple(idx.get("fields", [])) for idx in col.indexes()}
+        if tuple(fields) not in existing:
+            col.add_index({"type": "persistent", "fields": fields})
+
+
+def ensure_entities_view(db) -> None:
+    properties = {
+        "links": {
+            "entities": {
+                "fields": {
+                    "canonical_name": {"analyzers": ["text_en"]},
+                    "aliases": {"analyzers": ["text_en"]},
+                    "notebook_id": {"analyzers": ["identity"]},
+                    "user_id": {"analyzers": ["identity"]},
+                    "retrieval_version_id": {"analyzers": ["identity"]},
+                }
+            }
+        }
+    }
+    existing = {v["name"] for v in db.views()}
+    if "entities_view" not in existing:
+        db.create_view(
+            name="entities_view",
+            view_type="arangosearch",
+            properties=properties,
+        )
+    else:
+        db.update_arangosearch_view(name="entities_view", properties=properties)
 
 
 def ensure_vector_index(db) -> None:
