@@ -4,8 +4,8 @@ public class ModelRegistry(IConfiguration config)
 {
     private static readonly string[] DefaultAllowed = ["gpt-4o-mini"];
 
-    public string ChatDefault    => config["Models:ChatDefault"]    ?? "gpt-4o-mini";
-    public string AgentDefault   => config["Models:AgentDefault"]   ?? "gpt-4o-mini";
+    public string ChatDefault => config["Models:ChatDefault"] ?? "gpt-4o-mini";
+    public string AgentDefault => config["Models:AgentDefault"] ?? "gpt-4o-mini";
     public string SummaryDefault => config["Models:SummaryDefault"] ?? "gpt-4o-mini";
 
     public IReadOnlyList<string> AllowedModels =>

@@ -1,12 +1,6 @@
 using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
 using System.Text;
-using AppDbContext = global::BeServer.Data.AppDbContext;
-using AuthController = global::BeServer.Auth.AuthController;
-using JwtConstants = global::BeServer.Auth.JwtConstants;
-using JwtService = global::BeServer.Auth.JwtService;
-using LoginRequest = global::BeServer.Auth.LoginRequest;
-using User = global::BeServer.Data.Entities.User;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
@@ -15,6 +9,12 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.FileProviders;
 using Microsoft.IdentityModel.Tokens;
 using Xunit;
+using AppDbContext = global::BeServer.Data.AppDbContext;
+using AuthController = global::BeServer.Auth.AuthController;
+using JwtConstants = global::BeServer.Auth.JwtConstants;
+using JwtService = global::BeServer.Auth.JwtService;
+using LoginRequest = global::BeServer.Auth.LoginRequest;
+using User = global::BeServer.Data.Entities.User;
 
 namespace BeServer.Tests;
 

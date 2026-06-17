@@ -30,6 +30,9 @@ jobs:
       - run: pip install .
       - run: ruff check app tests ../ai-server/app
       - run: python -m unittest discover -s tests
+        env:
+          RAG_INTERNAL_SECRET: ci_test_secret_at_least_32_characters_long
+          OPENAI_API_KEY: dummy
 
   frontend:
     runs-on: ubuntu-latest

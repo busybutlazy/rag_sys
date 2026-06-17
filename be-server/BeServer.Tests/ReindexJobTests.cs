@@ -238,7 +238,10 @@ public class ReindexJobTests
         {
             CreatedByUserId = userId,
             NotebookId = "",
-            ChunkSize = 800, ChunkOverlap = 100, EmbeddingModel = "m", EmbeddingDimensions = 3,
+            ChunkSize = 800,
+            ChunkOverlap = 100,
+            EmbeddingModel = "m",
+            EmbeddingDimensions = 3,
         };
         var notebook = new Notebook { UserId = userId, Name = "NB", ActiveRetrievalVersionId = version.Id };
         version.NotebookId = notebook.Id;
