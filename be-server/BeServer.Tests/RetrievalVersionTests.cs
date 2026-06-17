@@ -52,6 +52,83 @@ public class RetrievalVersionTests
         Assert.Equal(second.Id, await db.Sources.Select(s => s.ActiveRetrievalVersionId).SingleAsync());
     }
 
+    [Fact]
+    public void FromPreset_DefaultsEnableGraphToFalse()
+    {
+        var version = RetrievalVersionService.FromPreset("nb-1", "user-1", GeneralPreset(), notes: null);
+
+        Assert.False(version.EnableGraph);
+        Assert.Null(version.GraphExtractionModel);
+        Assert.Equal(1, version.MaxGraphHops);
+        Assert.Equal(8, version.MaxFactHits);
+    }
+
+    [Fact]
+    public void FromPreset_HonorsExplicitGraphOverrides()
+    {
+        var version = RetrievalVersionService.FromPreset(
+            "nb-1", "user-1", GeneralPreset(), notes: null,
+            enableGraph: true, graphExtractionModel: "gpt-4o-mini", maxGraphHops: 2, maxFactHits: 12);
+
+        Assert.True(version.EnableGraph);
+        Assert.Equal("gpt-4o-mini", version.GraphExtractionModel);
+        Assert.Equal(2, version.MaxGraphHops);
+        Assert.Equal(12, version.MaxFactHits);
+    }
+
+    [Fact]
+    public void Fork_InheritsParentGraphSettingsByDefault()
+    {
+        var parent = RetrievalVersionService.FromPreset(
+            "nb-1", "user-1", GeneralPreset(), notes: null,
+            enableGraph: true, graphExtractionModel: "gpt-4o-mini", maxGraphHops: 3, maxFactHits: 10);
+
+        var forked = RetrievalVersionService.Fork("nb-1", "user-1", parent, notes: null);
+
+        Assert.True(forked.EnableGraph);
+        Assert.Equal("gpt-4o-mini", forked.GraphExtractionModel);
+        Assert.Equal(3, forked.MaxGraphHops);
+        Assert.Equal(10, forked.MaxFactHits);
+    }
+
+    [Fact]
+    public void Fork_CanExplicitlyOverrideParentGraphSettings()
+    {
+        var parent = RetrievalVersionService.FromPreset("nb-1", "user-1", GeneralPreset(), notes: null);
+
+        var forked = RetrievalVersionService.Fork(
+            "nb-1", "user-1", parent, notes: null,
+            enableGraph: true, graphExtractionModel: "gpt-4o", maxGraphHops: 2, maxFactHits: 5);
+
+        Assert.True(forked.EnableGraph);
+        Assert.Equal("gpt-4o", forked.GraphExtractionModel);
+        Assert.Equal(2, forked.MaxGraphHops);
+        Assert.Equal(5, forked.MaxFactHits);
+    }
+
+    [Fact]
+    public async Task Create_WithEnableGraphTrue_PersistsGraphSettingsOnNewVersion()
+    {
+        await using var db = CreateDb();
+        var user = await SeedUser(db, isDevAdmin: true);
+        var notebook = new Notebook { UserId = user.Id, Name = "Notebook" };
+        db.Notebooks.Add(notebook);
+        db.RetrievalPresets.Add(GeneralPreset());
+        await db.SaveChangesAsync();
+
+        var controller = CreateLabController(db, user.Id);
+        var result = await controller.Create(
+            notebook.Id,
+            new CreateRetrievalVersionRequest(PresetKey: "general", ParentVersionId: null, Notes: null, EnableGraph: true, GraphExtractionModel: "gpt-4o-mini", MaxGraphHops: 2, MaxFactHits: 6));
+
+        Assert.IsType<CreatedAtActionResult>(result);
+        var version = await db.NotebookRetrievalVersions.SingleAsync(v => v.NotebookId == notebook.Id);
+        Assert.True(version.EnableGraph);
+        Assert.Equal("gpt-4o-mini", version.GraphExtractionModel);
+        Assert.Equal(2, version.MaxGraphHops);
+        Assert.Equal(6, version.MaxFactHits);
+    }
+
     private static AppDbContext CreateDb() =>
         new(new DbContextOptionsBuilder<AppDbContext>().UseInMemoryDatabase(Guid.NewGuid().ToString()).Options);
 

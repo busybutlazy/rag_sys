@@ -273,6 +273,9 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             e.Property(v => v.OriginPresetId).HasMaxLength(36);
             e.Property(v => v.EmbeddingModel).HasMaxLength(128).IsRequired();
             e.Property(v => v.DefaultSearchMode).HasMaxLength(32).IsRequired();
+            e.Property(v => v.GraphExtractionModel).HasMaxLength(128);
+            e.Property(v => v.MaxGraphHops).HasDefaultValue(1);
+            e.Property(v => v.MaxFactHits).HasDefaultValue(8);
             e.Property(v => v.Notes).HasMaxLength(1000);
             e.Property(v => v.CreatedAt).HasColumnType("datetime");
             e.HasOne(v => v.Notebook).WithMany(n => n.RetrievalVersions).HasForeignKey(v => v.NotebookId).OnDelete(DeleteBehavior.Cascade);

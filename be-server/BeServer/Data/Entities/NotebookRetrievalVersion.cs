@@ -14,6 +14,10 @@ public class NotebookRetrievalVersion
     public string DefaultSearchMode { get; set; } = "hybrid";
     public int DefaultTopK { get; set; } = 5;
     public double DefaultHybridAlpha { get; set; } = 0.5;
+    public bool EnableGraph { get; set; } = false;
+    public string? GraphExtractionModel { get; set; }
+    public int MaxGraphHops { get; set; } = 1;
+    public int MaxFactHits { get; set; } = 8;
     public string? Notes { get; set; }
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 

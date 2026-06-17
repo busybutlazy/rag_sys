@@ -44,6 +44,10 @@ public class LabRetrievalVersionsController(
             v.DefaultSearchMode,
             v.DefaultTopK,
             v.DefaultHybridAlpha,
+            v.EnableGraph,
+            v.GraphExtractionModel,
+            v.MaxGraphHops,
+            v.MaxFactHits,
             v.Notes,
             v.CreatedAt,
             Active = v.Id == activeId,
@@ -62,14 +66,18 @@ public class LabRetrievalVersionsController(
             var preset = await db.RetrievalPresets.SingleOrDefaultAsync(p => p.Key == req.PresetKey);
             if (preset is null)
                 return ApiErrors.BadRequest(this, "retrieval.preset_not_found", "Preset not found");
-            version = RetrievalVersionService.FromPreset(notebookId, UserId, preset, req.Notes);
+            version = RetrievalVersionService.FromPreset(
+                notebookId, UserId, preset, req.Notes,
+                req.EnableGraph ?? false, req.GraphExtractionModel, req.MaxGraphHops ?? 1, req.MaxFactHits ?? 8);
         }
         else
         {
             var parent = await db.NotebookRetrievalVersions.SingleOrDefaultAsync(v => v.Id == req.ParentVersionId && v.NotebookId == notebookId);
             if (parent is null)
                 return ApiErrors.BadRequest(this, "retrieval.parent_not_found", "Parent version not found");
-            version = RetrievalVersionService.Fork(notebookId, UserId, parent, req.Notes);
+            version = RetrievalVersionService.Fork(
+                notebookId, UserId, parent, req.Notes,
+                req.EnableGraph, req.GraphExtractionModel, req.MaxGraphHops, req.MaxFactHits);
         }
 
         db.NotebookRetrievalVersions.Add(version);
@@ -96,4 +104,11 @@ public class LabRetrievalVersionsController(
     }
 }
 
-public record CreateRetrievalVersionRequest(string? PresetKey, string? ParentVersionId, string? Notes);
+public record CreateRetrievalVersionRequest(
+    string? PresetKey,
+    string? ParentVersionId,
+    string? Notes,
+    bool? EnableGraph = null,
+    string? GraphExtractionModel = null,
+    int? MaxGraphHops = null,
+    int? MaxFactHits = null);

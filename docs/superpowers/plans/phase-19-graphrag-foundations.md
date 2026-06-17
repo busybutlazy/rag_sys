@@ -147,7 +147,7 @@ No new tables. No new UI surface beyond adding `graph_hybrid` to the existing mo
 - [x] Add `DELETE` cleanup path mirroring `delete_chunks(retrieval_version_id=...)` so graph data is retired exactly when a version's chunks are. Implemented as `vector_store.delete_graph_payload`, called from the existing `DELETE /notebooks/{notebook_id}/chunks` handler in lockstep with `delete_version_chunks` rather than as a separate endpoint BE would need to remember to call.
 
 **BE**
-- [ ] Add `EnableGraph`, `GraphExtractionModel`, `MaxGraphHops`, `MaxFactHits` to `NotebookRetrievalVersion` + migration + model snapshot.
+- [x] Add `EnableGraph`, `GraphExtractionModel`, `MaxGraphHops`, `MaxFactHits` to `NotebookRetrievalVersion` + migration + model snapshot. `FromPreset`/`Fork` accept optional overrides (Fork inherits the parent's graph settings by default); `LabRetrievalVersionsController.Create` and the version listing expose the new fields. Migration generated via `dotnet ef migrations add` with explicit `HasDefaultValue(1)`/`HasDefaultValue(8)` so existing rows backfill to the intended defaults rather than CLR `0`. 5 new BE tests, full suite 60/60, `dotnet format --verify-no-changes` clean.
 - [ ] Extend `IngestionJobWorker` (and `ReindexJobWorker`, same code path): after a successful ingest, if the target retrieval version has `EnableGraph`, fetch chunk texts (existing `GET /documents/{source_id}/content`), call AI server's extraction endpoint, then call RAG's `/graph/ingest`.
 - [ ] Extraction failure must not fail the underlying ingestion — log and mark a `GraphExtractionStatus` field (`Skipped|Succeeded|Failed`) on the job record; vector/BM25 retrieval for that source must remain usable either way.
 
