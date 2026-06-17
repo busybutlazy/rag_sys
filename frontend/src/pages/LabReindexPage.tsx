@@ -106,32 +106,38 @@ export default function LabReindexPage() {
   const nonActiveVersions = versions.filter(v => !v.active)
 
   return (
-    <div className="page-stack">
-      <header>
+    <div className="lab-page">
+      <header className="lab-hero">
         <p className="eyebrow">Lab</p>
         <h1 className="page-title">Re-indexing</h1>
         <p className="muted">Rebuild a notebook's index under a new retrieval version. Old chunks are preserved until you promote.</p>
       </header>
 
       <section className="workspace-panel">
-        <label className="field-label">Notebook</label>
-        <select value={notebookId} onChange={e => setNotebookId(e.target.value)} className="ui-input">
-          {notebooks.map(n => <option key={n.id} value={n.id}>{n.name}</option>)}
-        </select>
+        <label>
+          <span className="field-label">Notebook</span>
+          <select value={notebookId} onChange={e => setNotebookId(e.target.value)} className="ui-input">
+            {notebooks.map(n => <option key={n.id} value={n.id}>{n.name}</option>)}
+          </select>
+        </label>
       </section>
 
       {notebookId && (
         <section className="workspace-panel">
-          <h2 className="section-title">Queue a notebook re-index</h2>
-          <p className="muted" style={{ marginBottom: '0.5rem' }}>
-            Active: <code>{activeVersion ? `${activeVersion.id.slice(0, 8)} · ${activeVersion.chunkSize}/${activeVersion.chunkOverlap}` : 'none'}</code>
-          </p>
+          <div className="lab-panel-head">
+            <div>
+              <h2 className="section-title">Queue a rebuild</h2>
+              <p className="muted">
+                Active: <code>{activeVersion ? `${activeVersion.id.slice(0, 8)} · ${activeVersion.chunkSize}/${activeVersion.chunkOverlap}` : 'none'}</code>
+              </p>
+            </div>
+          </div>
           {nonActiveVersions.length === 0 ? (
             <p className="muted">No other retrieval versions available. Create one in Retrieval Versions first.</p>
           ) : (
-            <div className="surface-row" style={{ gap: '0.75rem', flexWrap: 'wrap' }}>
-              <div>
-                <label className="field-label">Target version</label>
+            <div className="lab-inline-form">
+              <label>
+                <span className="field-label">Target version</span>
                 <select value={targetVersionId} onChange={e => setTargetVersionId(e.target.value)} className="ui-input">
                   {nonActiveVersions.map(v => (
                     <option key={v.id} value={v.id}>
@@ -139,7 +145,7 @@ export default function LabReindexPage() {
                     </option>
                   ))}
                 </select>
-              </div>
+              </label>
               <button className="ui-button" onClick={queueNotebook} disabled={busy || !targetVersionId}>
                 Re-index notebook
               </button>
@@ -151,14 +157,17 @@ export default function LabReindexPage() {
 
       {jobs.length > 0 && (
         <section className="workspace-panel">
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.75rem' }}>
-            <h2 className="section-title" style={{ margin: 0 }}>Jobs</h2>
+          <div className="lab-panel-head">
+            <div>
+              <h2 className="section-title">Jobs</h2>
+              <p className="muted">Promotion happens only after a successful rebuild.</p>
+            </div>
             <button className="ui-button ui-button-ghost" onClick={refresh} disabled={busy}>Refresh</button>
           </div>
-          <div className="stack-list">
+          <div className="lab-card-list">
             {jobs.map(job => (
-              <div key={job.id} className="surface-row" style={{ flexDirection: 'column', alignItems: 'flex-start', gap: '0.4rem' }}>
-                <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center', width: '100%' }}>
+              <div key={job.id} className="lab-card lab-job">
+                <div className="lab-job-topline">
                   <span className={STATUS_CLASSES[job.status] ?? 'status-chip'}>{job.status}</span>
                   <span className="muted" style={{ fontSize: '0.75rem' }}>{job.scope}</span>
                   <span style={{ flex: 1, fontFamily: 'monospace', fontSize: '0.75rem' }}>

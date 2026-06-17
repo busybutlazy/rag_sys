@@ -32,39 +32,43 @@ export default function AppShell({ children }: AppShellProps) {
             </button>
 
             <nav className="shell-nav" aria-label="Primary navigation">
-              <NavLink
-                to="/dashboard"
-                className={({ isActive }) => `shell-link ${isActive ? 'shell-link-active' : ''}`}
-              >
-                Home
-              </NavLink>
-              <NavLink
-                to="/notebooks"
-                className={({ isActive }) => `shell-link ${isActive ? 'shell-link-active' : ''}`}
-              >
-                Notebooks
-              </NavLink>
+              <div className="shell-nav-group">
+                <span className="shell-nav-label">Workspace</span>
+                <NavLink
+                  to="/dashboard"
+                  className={({ isActive }) => `shell-link ${isActive ? 'shell-link-active' : ''}`}
+                >
+                  Home
+                </NavLink>
+                <NavLink
+                  to="/notebooks"
+                  className={({ isActive }) => `shell-link ${isActive ? 'shell-link-active' : ''}`}
+                >
+                  Notebooks
+                </NavLink>
+              </div>
               {isDevAdmin && (
-                <>
+                <div className="shell-nav-group shell-nav-group-lab">
+                  <span className="shell-nav-label">Lab</span>
                   <NavLink
                     to="/lab/retrieval-versions"
                     className={({ isActive }) => `shell-link ${isActive ? 'shell-link-active' : ''}`}
                   >
-                    Lab · Retrieval Versions
+                    Versions
                   </NavLink>
                   <NavLink
                     to="/lab/reindex"
                     className={({ isActive }) => `shell-link ${isActive ? 'shell-link-active' : ''}`}
                   >
-                    Lab · Re-indexing
+                    Re-indexing
                   </NavLink>
                   <NavLink
                     to="/lab/retrieval-bench"
                     className={({ isActive }) => `shell-link ${isActive ? 'shell-link-active' : ''}`}
                   >
-                    Lab · Retrieval Bench
+                    Bench
                   </NavLink>
-                </>
+                </div>
               )}
             </nav>
 

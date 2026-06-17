@@ -205,15 +205,15 @@ Persisting raw ordered result snapshots gives us room to revise formulas later w
 
 ### Gate E — Phase completion hygiene
 
-- [ ] Focused BE and RAG tests cover version scoping, dataset/run flows, and comparison metrics.
-- [ ] Review document written under `docs/reviews/phase-18-review.md`.
-- [ ] ROADMAP3 phase status updated after merge-ready implementation.
+- [x] Focused BE and RAG tests cover version scoping, dataset/run flows, and comparison metrics.
+- [x] Review document written under `docs/reviews/phase-18-review.md`.
+- [x] ROADMAP3 phase status updated after merge-ready implementation.
 
 **Acceptance**
 
-- [ ] Relevant automated tests pass.
-- [ ] The review finds no open correctness issue that would make A/B evidence untrustworthy.
-- [ ] ROADMAP3 accurately reflects what shipped and what remains deferred.
+- [x] Relevant automated tests pass. (BE: 55/55 via `dotnet test`; RAG: 15/15 via `unittest discover` — verified 2026-06-17.)
+- [x] The review finds no open correctness issue that would make A/B evidence untrustworthy. (Verdict: "functionally coherent and mergeable"; one residual non-blocking item — stale `AppDbContextModelSnapshot.cs` — tracked, not a correctness risk.)
+- [x] ROADMAP3 accurately reflects what shipped and what remains deferred.
 
 ### Task 1 — Finish retrieval-version isolation seam
 
