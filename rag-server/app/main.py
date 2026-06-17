@@ -229,7 +229,7 @@ async def delete_document(
 ):
     _check_secret(x_internal_secret)
     db = get_db()
-    vector_store.delete_chunks(db, source_id, user_id)
+    vector_store.delete_all_source_chunks(db, source_id, user_id)
     docs_col = db.collection("documents")
     doc = docs_col.get(source_id)
     if doc and doc.get("user_id") == user_id:

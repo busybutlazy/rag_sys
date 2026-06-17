@@ -81,7 +81,7 @@ public class RagClient(HttpClient http, IConfiguration config, IHttpContextAcces
             : $"&retrieval_version_id={Uri.EscapeDataString(retrievalVersionId)}";
         var alphaQuery = alpha is null ? "" : $"&alpha={alpha.Value}";
         return GetAsync<RagSearchResponse>(
-            $"/search/{mode}?q={Uri.EscapeDataString(query)}&notebook_id={notebookId}&user_id={userId}&top_k={topK}{versionQuery}{alphaQuery}");
+            $"/search/{mode}?q={Uri.EscapeDataString(query)}&notebook_id={Uri.EscapeDataString(notebookId)}&user_id={Uri.EscapeDataString(userId)}&top_k={topK}{versionQuery}{alphaQuery}");
     }
 
     public Task<RagBenchmarkResponse> BenchmarkAsync(string query, string notebookId, string userId, int topK, string? retrievalVersionId = null)
@@ -90,7 +90,7 @@ public class RagClient(HttpClient http, IConfiguration config, IHttpContextAcces
             ? ""
             : $"&retrieval_version_id={Uri.EscapeDataString(retrievalVersionId)}";
         return GetAsync<RagBenchmarkResponse>(
-            $"/search/benchmark?q={Uri.EscapeDataString(query)}&notebook_id={notebookId}&user_id={userId}&top_k={topK}{versionQuery}");
+            $"/search/benchmark?q={Uri.EscapeDataString(query)}&notebook_id={Uri.EscapeDataString(notebookId)}&user_id={Uri.EscapeDataString(userId)}&top_k={topK}{versionQuery}");
     }
 
     public async Task<RagExperimentRecord> RunExperimentAsync(string notebookId, string userId, ExperimentRunRequest req)
