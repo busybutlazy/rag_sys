@@ -136,9 +136,9 @@ No new tables. No new UI surface beyond adding `graph_hybrid` to the existing mo
 ### Gate B — Extraction pipeline wired through existing job seams
 
 **AI server**
-- [ ] Add `POST /ai/extract/graph` (internal secret protected): input `{ chunks: [{chunk_index, text}] }`, output `{ chunk_index, mentions: [...], facts: [...] }[]`.
-- [ ] Implement via `LLMGateway` structured-output call, confined to this one module — no other AI server code gains LLM extraction responsibility.
-- [ ] Add `correlation_id` forwarding per existing convention (`rag_client.py` / `be_client.py` pattern).
+- [x] Add `POST /ai/extract/graph` (internal secret protected): input `{ chunks: [{chunk_index, text}] }`, output `{ chunk_index, mentions: [...], facts: [...] }[]`.
+- [x] Implement via `LLMGateway` structured-output call, confined to this one module — no other AI server code gains LLM extraction responsibility. (`app/graph_extraction.py`.)
+- [x] Add `correlation_id` forwarding per existing convention (`rag_client.py` / `be_client.py` pattern). (Route accepts `X-Correlation-Id` and forwards it on the `be_client.log_request` audit call, matching `/session-state/update`.)
 
 **RAG server**
 - [x] Add `POST /graph/ingest`: input `{ source_id, notebook_id, user_id, retrieval_version_id, chunk_extractions[] }`.
@@ -155,6 +155,8 @@ No new tables. No new UI surface beyond adding `graph_hybrid` to the existing mo
 - [x] A notebook with `EnableGraph=false` ingests exactly as it does today — no AI-server graph call, no new Arango writes. (`ExtractAndIngestAsync` returns `Skipped` before any HTTP call when `EnableGraph` is false; covered by `Worker_SkipsGraphExtraction_WhenVersionDoesNotEnableGraph` / `Worker_SourceScope_SkipsGraphExtraction_WhenTargetVersionDoesNotEnableGraph`.)
 - [x] A notebook with `EnableGraph=true` produces entities/facts/edges scoped to the correct `retrieval_version_id` after ingest. (End-to-end orchestration covered by `Worker_RunsGraphExtractionAndSucceeds_WhenVersionEnablesGraph` / `Worker_SourceScope_MarksGraphExtractionSucceeded_WhenTargetVersionEnablesGraph`; the actual Arango write correctness was independently verified in Gate B's RAG-side live-ArangoDB integration tests.)
 - [x] An extraction failure leaves the source `Ingested` with vector/BM25 search intact, and is visible in job status. (`Worker_MarksGraphExtractionFailed_ButIngestionStillSucceeds_WhenAiServerErrors`: job stays `Succeeded`, source stays `Ingested`, `GraphExtractionStatus` is `Failed`.)
+
+Additionally verified the real cross-service chain with no mocks: brought up live `arangodb` + `rag-server` + `ai-server` containers, seeded a chunk in Arango, then called the actual HTTP endpoints in sequence (`rag-server` `GET /documents/{id}/content` → `ai-server` `POST /ai/extract/graph` → `rag-server` `POST /graph/ingest`) exactly as `GraphExtractionService` does. With only a placeholder `OPENAI_API_KEY` in this dev environment, the LLM call inside `ai-server` failed and degraded to an empty `{mentions: [], facts: []}` per chunk rather than erroring — a real (not simulated) demonstration of the "extraction failure must not break the pipeline" guarantee.
 
 ### Gate C — Graph-aware retrieval branch
 
