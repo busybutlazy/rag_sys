@@ -1,9 +1,9 @@
 using System.Security.Cryptography;
-using BeServer.Data.Entities;
 using BeServer.Data;
+using BeServer.Data.Entities;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.EntityFrameworkCore;
 using Microsoft.AspNetCore.RateLimiting;
+using Microsoft.EntityFrameworkCore;
 
 namespace BeServer.Auth;
 

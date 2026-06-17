@@ -1,4 +1,6 @@
+using System.Diagnostics;
 using System.Text;
+using System.Threading.RateLimiting;
 using BeServer.Auth;
 using BeServer.Data;
 using BeServer.Data.Entities;
@@ -8,8 +10,6 @@ using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
-using System.Diagnostics;
-using System.Threading.RateLimiting;
 
 var builder = WebApplication.CreateBuilder(args);
 

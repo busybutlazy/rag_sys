@@ -1,12 +1,4 @@
 using System.Security.Claims;
-using AppDbContext = global::BeServer.Data.AppDbContext;
-using IngestionJob = global::BeServer.Data.Entities.IngestionJob;
-using IngestionJobStatuses = global::BeServer.Data.Entities.IngestionJobStatuses;
-using IngestionJobTypes = global::BeServer.Data.Entities.IngestionJobTypes;
-using Notebook = global::BeServer.Data.Entities.Notebook;
-using Source = global::BeServer.Data.Entities.Source;
-using SourcesController = global::BeServer.Content.SourcesController;
-using User = global::BeServer.Data.Entities.User;
 using BeServer.Services;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
@@ -16,6 +8,14 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Xunit;
+using AppDbContext = global::BeServer.Data.AppDbContext;
+using IngestionJob = global::BeServer.Data.Entities.IngestionJob;
+using IngestionJobStatuses = global::BeServer.Data.Entities.IngestionJobStatuses;
+using IngestionJobTypes = global::BeServer.Data.Entities.IngestionJobTypes;
+using Notebook = global::BeServer.Data.Entities.Notebook;
+using Source = global::BeServer.Data.Entities.Source;
+using SourcesController = global::BeServer.Content.SourcesController;
+using User = global::BeServer.Data.Entities.User;
 
 namespace BeServer.Tests;
 

@@ -34,9 +34,10 @@ public class LabRetrievalBenchController(
         var pairs = new List<object>();
         foreach (var mode in req.Modes)
         {
-            var left = await SearchAsync(req.Query.Trim(), notebookId, mode, req.TopK, req.RetrievalVersionAId, req.Alpha);
-            var right = await SearchAsync(req.Query.Trim(), notebookId, mode, req.TopK, req.RetrievalVersionBId, req.Alpha);
-            pairs.Add(ToComparisonDto(mode, left, right));
+            var leftTask = SearchAsync(req.Query.Trim(), notebookId, mode, req.TopK, req.RetrievalVersionAId, req.Alpha);
+            var rightTask = SearchAsync(req.Query.Trim(), notebookId, mode, req.TopK, req.RetrievalVersionBId, req.Alpha);
+            await Task.WhenAll(leftTask, rightTask);
+            pairs.Add(ToComparisonDto(mode, leftTask.Result, rightTask.Result));
         }
         return Ok(new
         {
@@ -85,11 +86,12 @@ public class LabRetrievalBenchController(
             {
                 foreach (var mode in req.Modes)
                 {
-                    var left = await SearchAsync(query.QueryText, notebookId, mode, req.TopK, req.RetrievalVersionAId, req.Alpha);
-                    var right = await SearchAsync(query.QueryText, notebookId, mode, req.TopK, req.RetrievalVersionBId, req.Alpha);
+                    var leftTask = SearchAsync(query.QueryText, notebookId, mode, req.TopK, req.RetrievalVersionAId, req.Alpha);
+                    var rightTask = SearchAsync(query.QueryText, notebookId, mode, req.TopK, req.RetrievalVersionBId, req.Alpha);
+                    await Task.WhenAll(leftTask, rightTask);
                     db.EvaluationResults.AddRange(
-                        ToResult(run.Id, query, req.RetrievalVersionAId, mode, left),
-                        ToResult(run.Id, query, req.RetrievalVersionBId, mode, right));
+                        ToResult(run.Id, query, req.RetrievalVersionAId, mode, leftTask.Result),
+                        ToResult(run.Id, query, req.RetrievalVersionBId, mode, rightTask.Result));
                 }
             }
 
@@ -134,10 +136,9 @@ public class LabRetrievalBenchController(
     [HttpGet("retrieval-bench/runs/{runId}")]
     public async Task<IActionResult> GetRun(string runId)
     {
-        var run = await db.EvaluationRuns.SingleOrDefaultAsync(r => r.Id == runId && r.UserId == UserId);
-        if (run is null)
+        if (!await ownership.EvaluationRunExistsAsync(runId))
             return ApiErrors.NotFound(this, "evaluation_run.not_found", "Evaluation run not found");
-        return Ok(await BuildRunDto(run.Id));
+        return Ok(await BuildRunDto(runId));
     }
 
     private async Task<IActionResult?> ValidateComparisonRequest(

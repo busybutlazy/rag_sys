@@ -121,13 +121,13 @@ class VectorStoreTests(unittest.TestCase):
         self.assertIn("user_id", fields)
         self.assertIn("retrieval_version_id", fields)
 
-    def test_delete_chunks_without_version_deletes_all_for_source(self):
+    def test_delete_chunks_without_version_only_deletes_versionless_chunks(self):
         db = FakeDb()
 
         vector_store.delete_chunks(db, "src-1", "user-1")
 
         self.assertIn("doc.source_id == @sid", db.aql.last_query)
-        self.assertNotIn("retrieval_version_id", db.aql.last_query)
+        self.assertIn("doc.retrieval_version_id == null", db.aql.last_query)
         self.assertEqual({"sid": "src-1", "uid": "user-1"}, db.aql.last_bind_vars)
 
     def test_delete_chunks_with_version_scopes_to_that_version(self):
@@ -137,6 +137,55 @@ class VectorStoreTests(unittest.TestCase):
 
         self.assertIn("doc.retrieval_version_id == @rv", db.aql.last_query)
         self.assertEqual({"sid": "src-1", "uid": "user-1", "rv": "rv-42"}, db.aql.last_bind_vars)
+
+    def test_delete_chunks_without_version_does_not_wipe_other_versions(self):
+        # Regression test: a missing/None retrieval_version_id must not be
+        # treated as "delete everything for this source." Simulate real
+        # filtering semantics so we prove versioned chunks survive.
+        class FilteringAql:
+            def __init__(self, docs):
+                self.docs = docs
+                self.last_query = None
+                self.last_bind_vars = None
+
+            def execute(self, query, bind_vars):
+                self.last_query = query
+                self.last_bind_vars = bind_vars
+                sid = bind_vars.get("sid")
+                uid = bind_vars.get("uid")
+                rv = bind_vars.get("rv")
+                if "rv" in bind_vars:
+                    self.docs = [
+                        d for d in self.docs
+                        if not (d["source_id"] == sid and d["user_id"] == uid and d.get("retrieval_version_id") == rv)
+                    ]
+                else:
+                    self.docs = [
+                        d for d in self.docs
+                        if not (d["source_id"] == sid and d["user_id"] == uid and d.get("retrieval_version_id") is None)
+                    ]
+                return []
+
+        db = FakeDb()
+        db.aql = FilteringAql([
+            {"source_id": "src-1", "user_id": "user-1", "retrieval_version_id": None},
+            {"source_id": "src-1", "user_id": "user-1", "retrieval_version_id": "rv-1"},
+            {"source_id": "src-1", "user_id": "user-1", "retrieval_version_id": "rv-2"},
+        ])
+
+        vector_store.delete_chunks(db, "src-1", "user-1", retrieval_version_id=None)
+
+        remaining_versions = {d["retrieval_version_id"] for d in db.aql.docs}
+        self.assertEqual({"rv-1", "rv-2"}, remaining_versions)
+
+    def test_delete_all_source_chunks_deletes_every_version(self):
+        db = FakeDb()
+
+        vector_store.delete_all_source_chunks(db, "src-1", "user-1")
+
+        self.assertIn("doc.source_id == @sid", db.aql.last_query)
+        self.assertNotIn("retrieval_version_id", db.aql.last_query)
+        self.assertEqual({"sid": "src-1", "uid": "user-1"}, db.aql.last_bind_vars)
 
     def test_delete_version_chunks_filters_by_notebook_and_version(self):
         db = FakeDb()

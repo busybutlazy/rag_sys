@@ -20,4 +20,7 @@ public class OwnershipService(AppDbContext db, CurrentUserAccessor currentUser)
             s.Id == sourceId &&
             s.UserId == currentUser.UserId &&
             s.NotebookId == notebookId);
+
+    public Task<bool> EvaluationRunExistsAsync(string runId) =>
+        db.EvaluationRuns.AnyAsync(r => r.Id == runId && r.UserId == currentUser.UserId);
 }

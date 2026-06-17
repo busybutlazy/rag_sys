@@ -30,6 +30,9 @@ jobs:
       - run: pip install .
       - run: ruff check app tests ../ai-server/app
       - run: python -m unittest discover -s tests
+        env:
+          RAG_INTERNAL_SECRET: ci_test_secret_at_least_32_characters_long
+          OPENAI_API_KEY: dummy
 
   frontend:
     runs-on: ubuntu-latest
@@ -49,11 +52,23 @@ jobs:
       - run: npm run build
 
   compose-smoke:
-    if: ${{ secrets.JWT_SECRET != '' && secrets.RAG_INTERNAL_SECRET != '' && secrets.AI_INTERNAL_SECRET != '' }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - run: docker compose build be-server ai-server rag-server frontend
+      - name: Check required secrets are configured
+        id: secrets-check
+        env:
+          JWT_SECRET: ${{ secrets.JWT_SECRET }}
+          RAG_INTERNAL_SECRET: ${{ secrets.RAG_INTERNAL_SECRET }}
+          AI_INTERNAL_SECRET: ${{ secrets.AI_INTERNAL_SECRET }}
+        run: |
+          if [ -n "$JWT_SECRET" ] && [ -n "$RAG_INTERNAL_SECRET" ] && [ -n "$AI_INTERNAL_SECRET" ]; then
+            echo "ready=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+          fi
+      - if: steps.secrets-check.outputs.ready == 'true'
+        run: docker compose build be-server ai-server rag-server frontend
         env:
           JWT_SECRET: ${{ secrets.JWT_SECRET }}
           RAG_INTERNAL_SECRET: ${{ secrets.RAG_INTERNAL_SECRET }}

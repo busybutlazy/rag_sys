@@ -104,10 +104,29 @@ def delete_chunks(db, source_id: str, user_id: str, retrieval_version_id: str | 
             bind_vars={"sid": source_id, "uid": user_id, "rv": retrieval_version_id},
         )
     else:
+        # No version specified: scope the delete to chunks that themselves
+        # have no retrieval_version_id, rather than wiping every version's
+        # chunks for this source. A caller that wants to remove the entire
+        # source (all versions) must use delete_document's explicit
+        # full-source delete instead of relying on this implicit fallback.
         db.aql.execute(
-            "FOR doc IN chunks FILTER doc.source_id == @sid AND doc.user_id == @uid REMOVE doc IN chunks",
+            "FOR doc IN chunks FILTER doc.source_id == @sid AND doc.user_id == @uid "
+            "AND doc.retrieval_version_id == null REMOVE doc IN chunks",
             bind_vars={"sid": source_id, "uid": user_id},
         )
+
+
+def delete_all_source_chunks(db, source_id: str, user_id: str) -> None:
+    """Explicitly delete every chunk for a source across all retrieval versions.
+
+    Use this only when the entire source is being removed (e.g. document
+    deletion). For reindex/version-scoped deletes, use delete_chunks with an
+    explicit retrieval_version_id instead.
+    """
+    db.aql.execute(
+        "FOR doc IN chunks FILTER doc.source_id == @sid AND doc.user_id == @uid REMOVE doc IN chunks",
+        bind_vars={"sid": source_id, "uid": user_id},
+    )
 
 
 def delete_version_chunks(db, notebook_id: str, user_id: str, retrieval_version_id: str) -> None:
