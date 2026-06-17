@@ -130,7 +130,7 @@ No new tables. No new UI surface beyond adding `graph_hybrid` to the existing mo
 - [x] Add an ArangoSearch view (BM25 over `canonical_name`/`aliases`) for keyword entity lookup — explicitly **not** vector search on entities in v1, matching `graph`'s own current limitation. Named `entities_view` rather than `entities_search_view` to match the existing `chunks_view` naming convention in this codebase.
 
 **Acceptance**
-- [x] Fresh deployment creates all 5 new collections + view + named graph without affecting existing `documents`/`chunks`/`notebooks`/`experiments`. (`ensure_collections`/`ensure_knowledge_graph`/`ensure_graph_indexes`/`ensure_entities_view` are all additive and idempotent; 8 new unit tests cover creation + idempotency in `rag-server/tests/test_vector_store.py`.)
+- [x] Fresh deployment creates all 5 new collections + view + named graph without affecting existing `documents`/`chunks`/`notebooks`/`experiments`. (`ensure_collections`/`ensure_knowledge_graph`/`ensure_graph_indexes`/`ensure_entities_view` are all additive and idempotent; 8 unit tests against a fake db client in `rag-server/tests/test_vector_store.py`, plus 6 integration tests against a real ArangoDB in `rag-server/tests/test_vector_store_integration.py` — skipped unless `ARANGO_URL` is set, run via `docker compose up -d arangodb arango-init` first.)
 - [ ] Every written vertex/edge carries `notebook_id` + `user_id` + `retrieval_version_id`. (Deferred to Gate B — nothing writes to these collections yet.)
 
 ### Gate B — Extraction pipeline wired through existing job seams
