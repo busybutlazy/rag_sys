@@ -22,6 +22,16 @@ class AgentRunRequest(BaseModel):
     session_id: str | None = None
 
 
+class GraphExtractChunk(BaseModel):
+    chunk_index: int
+    text: str
+
+
+class GraphExtractRequest(BaseModel):
+    chunks: list[GraphExtractChunk]
+    model: str | None = None
+
+
 class SessionStateUpdateRequest(BaseModel):
     request_id: str
     user_id: str | None = None

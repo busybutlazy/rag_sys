@@ -9,8 +9,9 @@ from app.auth import get_current_user, _JWT_SECRET
 from app.agent import stream_agent_events
 from app import be_client
 from app.gateway.openai_provider import OpenAIGateway
+from app.graph_extraction import extract_graph
 from app.json_logging import configure_json_logging
-from app.models import AgentRunRequest, ChatRequest, SessionStateUpdateRequest
+from app.models import AgentRunRequest, ChatRequest, GraphExtractRequest, SessionStateUpdateRequest
 from app import rag_client
 from app.metrics import metrics, observe_http
 
@@ -41,6 +42,7 @@ _ALLOWED_MODELS: set[str] = set(
     if m.strip()
 )
 _SUMMARY_MODEL = os.environ.get("SUMMARY_MODEL", "gpt-4o-mini")
+_GRAPH_EXTRACTION_MODEL = os.environ.get("GRAPH_EXTRACTION_MODEL", "gpt-4o-mini")
 
 _RAG_SYSTEM_PROMPT = (
     "You are a helpful assistant. Answer the user's question based on the provided context. "
@@ -252,6 +254,36 @@ async def session_state_update(
             correlation_id=x_correlation_id,
         )
         return fallback
+
+
+@app.post("/ai/extract/graph")
+async def extract_graph_endpoint(
+    req: GraphExtractRequest,
+    x_internal_secret: str | None = Header(default=None),
+    x_correlation_id: str | None = Header(default=None),
+):
+    if x_internal_secret != _AI_INTERNAL_SECRET:
+        raise HTTPException(status_code=401, detail="Invalid internal secret")
+
+    model = req.model or _GRAPH_EXTRACTION_MODEL
+    if model not in _ALLOWED_MODELS:
+        raise HTTPException(status_code=422, detail=f"Model '{model}' is not allowed")
+
+    chunks = [{"chunk_index": c.chunk_index, "text": c.text} for c in req.chunks]
+    started = time.perf_counter()
+    results = await extract_graph(_gateway, chunks, model)
+    await be_client.log_request(
+        chat_request_id=None,
+        session_id=None,
+        service="openai",
+        operation="extract.graph",
+        method="POST",
+        request_json={"model": model, "chunk_count": len(chunks)},
+        response_json={"chunk_count": len(results)},
+        duration_ms=int((time.perf_counter() - started) * 1000),
+        correlation_id=x_correlation_id,
+    )
+    return results
 
 
 @app.post("/agent/run")
