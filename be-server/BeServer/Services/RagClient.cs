@@ -117,6 +117,33 @@ public class RagClient(HttpClient http, IConfiguration config, IHttpContextAcces
     public Task<RagExperimentRecord> GetExperimentAsync(string notebookId, string userId, string experimentId) =>
         GetAsync<RagExperimentRecord>($"/experiments/{experimentId}?notebook_id={notebookId}&user_id={userId}");
 
+    public Task<RagSourceContentResponse> GetSourceContentAsync(string sourceId, string notebookId, string userId, string? retrievalVersionId = null)
+    {
+        var versionQuery = string.IsNullOrWhiteSpace(retrievalVersionId)
+            ? ""
+            : $"&retrieval_version_id={Uri.EscapeDataString(retrievalVersionId)}";
+        return GetAsync<RagSourceContentResponse>(
+            $"/documents/{sourceId}/content?notebook_id={Uri.EscapeDataString(notebookId)}&user_id={Uri.EscapeDataString(userId)}{versionQuery}");
+    }
+
+    public async Task<RagGraphIngestResponse> GraphIngestAsync(
+        string sourceId, string notebookId, string userId, string? retrievalVersionId, IReadOnlyList<RagChunkExtraction> chunkExtractions)
+    {
+        var payload = new
+        {
+            source_id = sourceId,
+            notebook_id = notebookId,
+            user_id = userId,
+            retrieval_version_id = retrievalVersionId,
+            chunk_extractions = chunkExtractions,
+        };
+        var req = new HttpRequestMessage(HttpMethod.Post, "/graph/ingest") { Content = JsonContent.Create(payload, options: JsonOptions) };
+        AddHeaders(req);
+        var response = await http.SendAsync(req);
+        response.EnsureSuccessStatusCode();
+        return await ReadAsync<RagGraphIngestResponse>(response);
+    }
+
     private async Task<T> GetAsync<T>(string url)
     {
         var req = new HttpRequestMessage(HttpMethod.Get, url);
@@ -161,6 +188,32 @@ public record RagExperimentRecord(
     [property: JsonPropertyName("created_at")] string CreatedAt);
 public record ExperimentConfig(string[] Modes, int TopK = 5, double Alpha = 0.5);
 public record ExperimentRunRequest(string? Name, string[] Queries, ExperimentConfig? Config);
+public record RagSourceContentResponse(
+    [property: JsonPropertyName("source_id")] string SourceId,
+    [property: JsonPropertyName("notebook_id")] string NotebookId,
+    List<RagChunkResult> Chunks,
+    string Text,
+    bool Truncated);
+public record RagGraphMention(
+    [property: JsonPropertyName("entity_name")] string EntityName,
+    [property: JsonPropertyName("entity_type")] string EntityType);
+public record RagGraphFactParticipant(
+    [property: JsonPropertyName("entity_name")] string EntityName,
+    string Role);
+public record RagGraphFact(
+    string Predicate,
+    [property: JsonPropertyName("statement_text")] string StatementText,
+    double Confidence,
+    List<RagGraphFactParticipant> Participants);
+public record RagChunkExtraction(
+    [property: JsonPropertyName("chunk_index")] int ChunkIndex,
+    List<RagGraphMention> Mentions,
+    List<RagGraphFact> Facts);
+public record RagGraphIngestResponse(
+    [property: JsonPropertyName("entities_written")] int EntitiesWritten,
+    [property: JsonPropertyName("facts_written")] int FactsWritten,
+    [property: JsonPropertyName("edges_written")] int EdgesWritten,
+    [property: JsonPropertyName("skipped_chunks")] List<int> SkippedChunks);
 public record RagRetrievalConfig(
     [property: JsonPropertyName("retrieval_version_id")] string RetrievalVersionId,
     [property: JsonPropertyName("chunk_size")] int ChunkSize,

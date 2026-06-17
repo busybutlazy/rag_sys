@@ -37,6 +37,7 @@ public class ReindexJobWorker(
         await using var scope = scopeFactory.CreateAsyncScope();
         var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
         var rag = scope.ServiceProvider.GetRequiredService<RagClient>();
+        var graphExtraction = scope.ServiceProvider.GetRequiredService<GraphExtractionService>();
         var now = DateTime.UtcNow;
 
         var job = await db.ReindexJobs
@@ -84,9 +85,9 @@ public class ReindexJobWorker(
         try
         {
             if (job.Scope == ReindexJobScopes.Source)
-                await ProcessSourceJobAsync(db, rag, job, retrieval, cancellationToken);
+                await ProcessSourceJobAsync(db, rag, graphExtraction, job, targetVersion, retrieval, cancellationToken);
             else
-                await ProcessNotebookJobAsync(db, rag, job, retrieval, cancellationToken);
+                await ProcessNotebookJobAsync(db, rag, graphExtraction, job, targetVersion, retrieval, cancellationToken);
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
@@ -122,8 +123,8 @@ public class ReindexJobWorker(
     }
 
     private async Task ProcessSourceJobAsync(
-        AppDbContext db, RagClient rag, ReindexJob job,
-        RagRetrievalConfig retrieval, CancellationToken cancellationToken)
+        AppDbContext db, RagClient rag, GraphExtractionService graphExtraction, ReindexJob job,
+        NotebookRetrievalVersion targetVersion, RagRetrievalConfig retrieval, CancellationToken cancellationToken)
     {
         var source = await db.Sources.FirstOrDefaultAsync(
             s => s.Id == job.SourceId && s.NotebookId == job.NotebookId && s.UserId == job.UserId,
@@ -143,6 +144,9 @@ public class ReindexJobWorker(
         await rag.IngestAsync(source.Id, source.NotebookId, source.UserId,
             source.FilePath ?? "", source.MimeType ?? "application/octet-stream", retrieval);
 
+        job.GraphExtractionStatus = await graphExtraction.ExtractAndIngestAsync(
+            source.Id, source.NotebookId, source.UserId, targetVersion, cancellationToken);
+
         var now = DateTime.UtcNow;
         job.Status = ReindexJobStatuses.Succeeded;
         job.SourcesSucceeded = 1;
@@ -155,8 +159,8 @@ public class ReindexJobWorker(
     }
 
     private async Task ProcessNotebookJobAsync(
-        AppDbContext db, RagClient rag, ReindexJob job,
-        RagRetrievalConfig retrieval, CancellationToken cancellationToken)
+        AppDbContext db, RagClient rag, GraphExtractionService graphExtraction, ReindexJob job,
+        NotebookRetrievalVersion targetVersion, RagRetrievalConfig retrieval, CancellationToken cancellationToken)
     {
         var sources = await db.Sources
             .Where(s => s.NotebookId == job.NotebookId && s.UserId == job.UserId)
@@ -167,12 +171,17 @@ public class ReindexJobWorker(
         job.UpdatedAt = now;
         await db.SaveChangesAsync(cancellationToken);
 
+        var graphStatuses = new List<string>();
         foreach (var source in sources)
         {
             try
             {
                 await rag.IngestAsync(source.Id, source.NotebookId, source.UserId,
                     source.FilePath ?? "", source.MimeType ?? "application/octet-stream", retrieval);
+
+                var graphStatus = await graphExtraction.ExtractAndIngestAsync(
+                    source.Id, source.NotebookId, source.UserId, targetVersion, cancellationToken);
+                graphStatuses.Add(graphStatus);
 
                 now = DateTime.UtcNow;
                 source.LastIndexedRetrievalVersionId = job.TargetRetrievalVersionId;
@@ -192,6 +201,7 @@ public class ReindexJobWorker(
 
         now = DateTime.UtcNow;
         job.Status = job.SourcesFailed > 0 ? ReindexJobStatuses.Failed : ReindexJobStatuses.Succeeded;
+        job.GraphExtractionStatus = GraphExtractionService.Aggregate(graphStatuses);
         if (job.SourcesFailed > 0)
             job.LastError = $"{job.SourcesFailed} of {job.SourcesTotal} sources failed to reindex.";
         job.CompletedAt = now;

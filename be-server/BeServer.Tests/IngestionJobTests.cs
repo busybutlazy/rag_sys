@@ -9,12 +9,15 @@ using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Xunit;
 using AppDbContext = global::BeServer.Data.AppDbContext;
+using GraphExtractionStatuses = global::BeServer.Data.Entities.GraphExtractionStatuses;
 using IngestionJob = global::BeServer.Data.Entities.IngestionJob;
 using IngestionJobStatuses = global::BeServer.Data.Entities.IngestionJobStatuses;
 using IngestionJobTypes = global::BeServer.Data.Entities.IngestionJobTypes;
 using Notebook = global::BeServer.Data.Entities.Notebook;
+using NotebookRetrievalVersion = global::BeServer.Data.Entities.NotebookRetrievalVersion;
 using Source = global::BeServer.Data.Entities.Source;
 using SourcesController = global::BeServer.Content.SourcesController;
+using SourceStatuses = global::BeServer.Data.Entities.SourceStatuses;
 using User = global::BeServer.Data.Entities.User;
 
 namespace BeServer.Tests;
@@ -207,6 +210,99 @@ public class IngestionJobTests
     }
 
     [Fact]
+    public async Task Worker_SkipsGraphExtraction_WhenVersionDoesNotEnableGraph()
+    {
+        var handler = new FakeHandler(_ => new HttpResponseMessage(System.Net.HttpStatusCode.OK));
+        await using var provider = CreateWorkerProvider(handler);
+        await SeedSourceAndJob(provider, configureVersion: v => v.EnableGraph = false);
+        var worker = provider.GetRequiredService<IngestionJobWorker>();
+
+        await worker.ProcessNextAsync();
+
+        await using var scope = provider.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        var job = await db.IngestionJobs.SingleAsync();
+        Assert.Equal(IngestionJobStatuses.Succeeded, job.Status);
+        Assert.Equal(GraphExtractionStatuses.Skipped, job.GraphExtractionStatus);
+    }
+
+    [Fact]
+    public async Task Worker_RunsGraphExtractionAndSucceeds_WhenVersionEnablesGraph()
+    {
+        var handler = new FakeHandler(req =>
+        {
+            var path = req.RequestUri!.AbsolutePath;
+            if (path.EndsWith("/content"))
+                return JsonResponse(new
+                {
+                    source_id = "s",
+                    notebook_id = "n",
+                    chunks = new[] { new { source_id = "s", chunk_index = 0, text = "hello world" } },
+                    text = "hello world",
+                    truncated = false,
+                });
+            if (path == "/ai/extract/graph")
+                return JsonResponse(new[]
+                {
+                    new { chunk_index = 0, mentions = Array.Empty<object>(), facts = Array.Empty<object>() },
+                });
+            if (path == "/graph/ingest")
+                return JsonResponse(new { entities_written = 0, facts_written = 0, edges_written = 0, skipped_chunks = Array.Empty<int>() });
+            return new HttpResponseMessage(System.Net.HttpStatusCode.OK);
+        });
+        await using var provider = CreateWorkerProvider(handler);
+        await SeedSourceAndJob(provider, configureVersion: v => v.EnableGraph = true);
+        var worker = provider.GetRequiredService<IngestionJobWorker>();
+
+        await worker.ProcessNextAsync();
+
+        await using var scope = provider.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        var job = await db.IngestionJobs.SingleAsync();
+        Assert.Equal(IngestionJobStatuses.Succeeded, job.Status);
+        Assert.Equal(GraphExtractionStatuses.Succeeded, job.GraphExtractionStatus);
+    }
+
+    [Fact]
+    public async Task Worker_MarksGraphExtractionFailed_ButIngestionStillSucceeds_WhenAiServerErrors()
+    {
+        var handler = new FakeHandler(req =>
+        {
+            var path = req.RequestUri!.AbsolutePath;
+            if (path.EndsWith("/content"))
+                return JsonResponse(new
+                {
+                    source_id = "s",
+                    notebook_id = "n",
+                    chunks = new[] { new { source_id = "s", chunk_index = 0, text = "hello world" } },
+                    text = "hello world",
+                    truncated = false,
+                });
+            if (path == "/ai/extract/graph")
+                return new HttpResponseMessage(System.Net.HttpStatusCode.InternalServerError);
+            return new HttpResponseMessage(System.Net.HttpStatusCode.OK);
+        });
+        await using var provider = CreateWorkerProvider(handler);
+        await SeedSourceAndJob(provider, configureVersion: v => v.EnableGraph = true);
+        var worker = provider.GetRequiredService<IngestionJobWorker>();
+
+        await worker.ProcessNextAsync();
+
+        await using var scope = provider.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        var job = await db.IngestionJobs.SingleAsync();
+        var source = await db.Sources.SingleAsync();
+        Assert.Equal(IngestionJobStatuses.Succeeded, job.Status);
+        Assert.Equal(GraphExtractionStatuses.Failed, job.GraphExtractionStatus);
+        Assert.Equal(SourceStatuses.Ingested, source.Status);
+    }
+
+    private static HttpResponseMessage JsonResponse(object body) => new(System.Net.HttpStatusCode.OK)
+    {
+        Content = new StringContent(System.Text.Json.JsonSerializer.Serialize(body), System.Text.Encoding.UTF8, "application/json"),
+    };
+
+    [Fact]
     public async Task Reingest_CreatesNewQueuedJob_AndCancelsActive()
     {
         await using var db = CreateDb();
@@ -378,21 +474,42 @@ public class IngestionJobTests
             .Build();
         services.AddDbContext<AppDbContext>(options => options.UseInMemoryDatabase(dbName));
         services.AddHttpContextAccessor();
+        services.AddSingleton<IConfiguration>(config);
         services.AddScoped(_ => new RagClient(
             new HttpClient(handler) { BaseAddress = new Uri("http://rag-server") },
             config,
             new HttpContextAccessor()));
+        services.AddSingleton<IHttpClientFactory>(new FakeHttpClientFactory(handler));
+        services.AddSingleton<ILogger<GraphExtractionService>>(NullLogger<GraphExtractionService>.Instance);
+        services.AddScoped<GraphExtractionService>();
         services.AddSingleton<ILogger<IngestionJobWorker>>(NullLogger<IngestionJobWorker>.Instance);
         services.AddSingleton<IngestionJobWorker>();
         return services.BuildServiceProvider();
     }
 
-    private static async Task SeedSourceAndJob(ServiceProvider provider, int maxAttempts = 3)
+    private static async Task SeedSourceAndJob(
+        ServiceProvider provider, int maxAttempts = 3, Action<NotebookRetrievalVersion>? configureVersion = null)
     {
         await using var scope = provider.CreateAsyncScope();
         var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
         var user = await SeedUser(db);
         var notebook = await SeedNotebook(db, user.Id);
+        string? versionId = null;
+        if (configureVersion is not null)
+        {
+            var version = new NotebookRetrievalVersion
+            {
+                NotebookId = notebook.Id,
+                CreatedByUserId = user.Id,
+                ChunkSize = 800,
+                ChunkOverlap = 100,
+                EmbeddingModel = "m",
+                EmbeddingDimensions = 3,
+            };
+            configureVersion(version);
+            db.NotebookRetrievalVersions.Add(version);
+            versionId = version.Id;
+        }
         var source = new Source
         {
             UserId = user.Id,
@@ -401,6 +518,7 @@ public class IngestionJobTests
             FilePath = "/tmp/doc.txt",
             MimeType = "text/plain",
             Status = IngestionJobStatuses.Queued,
+            ActiveRetrievalVersionId = versionId,
         };
         db.Sources.Add(source);
         db.IngestionJobs.Add(new IngestionJob
@@ -420,5 +538,10 @@ public class IngestionJobTests
     {
         protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken) =>
             Task.FromResult(respond?.Invoke(request) ?? new HttpResponseMessage(System.Net.HttpStatusCode.OK));
+    }
+
+    private sealed class FakeHttpClientFactory(HttpMessageHandler handler) : IHttpClientFactory
+    {
+        public HttpClient CreateClient(string name) => new(handler) { BaseAddress = new Uri("http://ai-server") };
     }
 }

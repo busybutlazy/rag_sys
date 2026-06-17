@@ -16,6 +16,7 @@ public class ReindexJob
     public int AttemptCount { get; set; }
     public int MaxAttempts { get; set; } = 3;
     public string? LastError { get; set; }
+    public string? GraphExtractionStatus { get; set; }
     public DateTime AvailableAt { get; set; } = DateTime.UtcNow;
     public DateTime? StartedAt { get; set; }
     public DateTime? CompletedAt { get; set; }

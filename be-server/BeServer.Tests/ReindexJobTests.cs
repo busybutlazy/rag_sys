@@ -7,6 +7,9 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 using Xunit;
 
 namespace BeServer.Tests;
@@ -217,6 +220,139 @@ public class ReindexJobTests
         var result = await controller.QueueNotebookReindex(notebook.Id, new QueueReindexRequest("no-such-version"));
 
         Assert.IsType<BadRequestObjectResult>(result);
+    }
+
+    [Fact]
+    public async Task Worker_SourceScope_MarksGraphExtractionSucceeded_WhenTargetVersionEnablesGraph()
+    {
+        var handler = new FakeJsonHandler(req =>
+        {
+            var path = req.RequestUri!.AbsolutePath;
+            if (path.EndsWith("/content"))
+                return JsonResponse(new
+                {
+                    source_id = "s",
+                    notebook_id = "n",
+                    chunks = new[] { new { source_id = "s", chunk_index = 0, text = "hello world" } },
+                    text = "hello world",
+                    truncated = false,
+                });
+            if (path == "/ai/extract/graph")
+                return JsonResponse(new[] { new { chunk_index = 0, mentions = Array.Empty<object>(), facts = Array.Empty<object>() } });
+            if (path == "/graph/ingest")
+                return JsonResponse(new { entities_written = 0, facts_written = 0, edges_written = 0, skipped_chunks = Array.Empty<int>() });
+            return new HttpResponseMessage(System.Net.HttpStatusCode.NoContent);
+        });
+        await using var provider = CreateWorkerProvider(handler);
+        var (notebook, target, source) = await SeedSourceScopeJob(provider, enableGraph: true);
+        var worker = provider.GetRequiredService<ReindexJobWorker>();
+
+        var processed = await worker.ProcessNextAsync();
+
+        Assert.True(processed);
+        await using var scope = provider.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        var job = await db.ReindexJobs.SingleAsync();
+        Assert.Equal(ReindexJobStatuses.Succeeded, job.Status);
+        Assert.Equal(GraphExtractionStatuses.Succeeded, job.GraphExtractionStatus);
+    }
+
+    [Fact]
+    public async Task Worker_SourceScope_SkipsGraphExtraction_WhenTargetVersionDoesNotEnableGraph()
+    {
+        var handler = new FakeJsonHandler(_ => new HttpResponseMessage(System.Net.HttpStatusCode.NoContent));
+        await using var provider = CreateWorkerProvider(handler);
+        var (notebook, target, source) = await SeedSourceScopeJob(provider, enableGraph: false);
+        var worker = provider.GetRequiredService<ReindexJobWorker>();
+
+        await worker.ProcessNextAsync();
+
+        await using var scope = provider.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        var job = await db.ReindexJobs.SingleAsync();
+        Assert.Equal(ReindexJobStatuses.Succeeded, job.Status);
+        Assert.Equal(GraphExtractionStatuses.Skipped, job.GraphExtractionStatus);
+    }
+
+    private static HttpResponseMessage JsonResponse(object body) => new(System.Net.HttpStatusCode.OK)
+    {
+        Content = new StringContent(System.Text.Json.JsonSerializer.Serialize(body), System.Text.Encoding.UTF8, "application/json"),
+    };
+
+    private static ServiceProvider CreateWorkerProvider(HttpMessageHandler handler)
+    {
+        var services = new ServiceCollection();
+        var dbName = Guid.NewGuid().ToString();
+        var config = new ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string?> { ["INTERNAL_SECRET"] = "test_internal_secret" })
+            .Build();
+        services.AddDbContext<AppDbContext>(options => options.UseInMemoryDatabase(dbName));
+        services.AddHttpContextAccessor();
+        services.AddSingleton<IConfiguration>(config);
+        services.AddScoped(_ => new RagClient(
+            new HttpClient(handler) { BaseAddress = new Uri("http://rag-server") },
+            config,
+            new HttpContextAccessor()));
+        services.AddSingleton<IHttpClientFactory>(new FakeHttpClientFactory(handler));
+        services.AddSingleton<ILogger<GraphExtractionService>>(NullLogger<GraphExtractionService>.Instance);
+        services.AddScoped<GraphExtractionService>();
+        services.AddSingleton<ILogger<ReindexJobWorker>>(NullLogger<ReindexJobWorker>.Instance);
+        services.AddSingleton<ReindexJobWorker>();
+        return services.BuildServiceProvider();
+    }
+
+    private static async Task<(Notebook notebook, NotebookRetrievalVersion target, Source source)> SeedSourceScopeJob(
+        ServiceProvider provider, bool enableGraph)
+    {
+        await using var scope = provider.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        var user = await SeedUser(db, isDevAdmin: true);
+        var (notebook, previous) = await SeedNotebookWithVersion(db, user.Id);
+        var target = new NotebookRetrievalVersion
+        {
+            NotebookId = notebook.Id,
+            CreatedByUserId = user.Id,
+            ChunkSize = 900,
+            ChunkOverlap = 100,
+            EmbeddingModel = "m",
+            EmbeddingDimensions = 3,
+            EnableGraph = enableGraph,
+        };
+        db.NotebookRetrievalVersions.Add(target);
+        var source = new Source
+        {
+            UserId = user.Id,
+            NotebookId = notebook.Id,
+            Title = "doc.txt",
+            FilePath = "/tmp/doc.txt",
+            MimeType = "text/plain",
+            LastIndexedRetrievalVersionId = previous.Id,
+        };
+        db.Sources.Add(source);
+        db.ReindexJobs.Add(new ReindexJob
+        {
+            NotebookId = notebook.Id,
+            UserId = user.Id,
+            SourceId = source.Id,
+            Scope = ReindexJobScopes.Source,
+            TargetRetrievalVersionId = target.Id,
+            PreviousRetrievalVersionId = previous.Id,
+            Status = ReindexJobStatuses.Queued,
+            AvailableAt = DateTime.UtcNow.AddSeconds(-1),
+        });
+        await db.SaveChangesAsync();
+        return (notebook, target, source);
+    }
+
+    private sealed class FakeJsonHandler(Func<HttpRequestMessage, HttpResponseMessage> respond) : HttpMessageHandler
+    {
+        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken) =>
+            Task.FromResult(respond(request));
+    }
+
+    private sealed class FakeHttpClientFactory(HttpMessageHandler handler) : IHttpClientFactory
+    {
+        public HttpClient CreateClient(string name) => new(handler) { BaseAddress = new Uri("http://ai-server") };
     }
 
     // ── Helpers ───────────────────────────────────

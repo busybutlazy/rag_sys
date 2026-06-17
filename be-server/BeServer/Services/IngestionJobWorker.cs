@@ -37,6 +37,7 @@ public class IngestionJobWorker(
         await using var scope = scopeFactory.CreateAsyncScope();
         var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
         var rag = scope.ServiceProvider.GetRequiredService<RagClient>();
+        var graphExtraction = scope.ServiceProvider.GetRequiredService<GraphExtractionService>();
         var now = DateTime.UtcNow;
 
         var job = await db.IngestionJobs
@@ -90,6 +91,10 @@ public class IngestionJobWorker(
                 retrievalVersion.DefaultTopK,
                 retrievalVersion.DefaultHybridAlpha);
             await rag.IngestAsync(source.Id, source.NotebookId, source.UserId, source.FilePath ?? "", source.MimeType ?? "application/octet-stream", retrieval);
+
+            if (retrievalVersion is not null)
+                job.GraphExtractionStatus = await graphExtraction.ExtractAndIngestAsync(
+                    source.Id, source.NotebookId, source.UserId, retrievalVersion, cancellationToken);
 
             now = DateTime.UtcNow;
             job.Status = IngestionJobStatuses.Succeeded;

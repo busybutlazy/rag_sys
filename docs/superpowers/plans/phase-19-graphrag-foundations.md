@@ -148,13 +148,13 @@ No new tables. No new UI surface beyond adding `graph_hybrid` to the existing mo
 
 **BE**
 - [x] Add `EnableGraph`, `GraphExtractionModel`, `MaxGraphHops`, `MaxFactHits` to `NotebookRetrievalVersion` + migration + model snapshot. `FromPreset`/`Fork` accept optional overrides (Fork inherits the parent's graph settings by default); `LabRetrievalVersionsController.Create` and the version listing expose the new fields. Migration generated via `dotnet ef migrations add` with explicit `HasDefaultValue(1)`/`HasDefaultValue(8)` so existing rows backfill to the intended defaults rather than CLR `0`. 5 new BE tests, full suite 60/60, `dotnet format --verify-no-changes` clean.
-- [ ] Extend `IngestionJobWorker` (and `ReindexJobWorker`, same code path): after a successful ingest, if the target retrieval version has `EnableGraph`, fetch chunk texts (existing `GET /documents/{source_id}/content`), call AI server's extraction endpoint, then call RAG's `/graph/ingest`.
-- [ ] Extraction failure must not fail the underlying ingestion — log and mark a `GraphExtractionStatus` field (`Skipped|Succeeded|Failed`) on the job record; vector/BM25 retrieval for that source must remain usable either way.
+- [x] Extend `IngestionJobWorker` (and `ReindexJobWorker`, same code path): after a successful ingest, if the target retrieval version has `EnableGraph`, fetch chunk texts (existing `GET /documents/{source_id}/content`), call AI server's extraction endpoint, then call RAG's `/graph/ingest`. Factored into a shared `GraphExtractionService` so both workers (and `ReindexJobWorker`'s notebook-scope multi-source path) call one orchestration path; `RagClient` gained `GetSourceContentAsync`/`GraphIngestAsync`.
+- [x] Extraction failure must not fail the underlying ingestion — log and mark a `GraphExtractionStatus` field (`Skipped|Succeeded|Failed`) on the job record; vector/BM25 retrieval for that source must remain usable either way. `GraphExtractionService.ExtractAndIngestAsync` never throws; notebook-scope reindex aggregates per-source statuses (`GraphExtractionService.Aggregate`: any failure dominates, then any success, then skipped).
 
 **Acceptance**
-- [ ] A notebook with `EnableGraph=false` ingests exactly as it does today — no AI-server graph call, no new Arango writes.
-- [ ] A notebook with `EnableGraph=true` produces entities/facts/edges scoped to the correct `retrieval_version_id` after ingest.
-- [ ] An extraction failure leaves the source `Ingested` with vector/BM25 search intact, and is visible in job status.
+- [x] A notebook with `EnableGraph=false` ingests exactly as it does today — no AI-server graph call, no new Arango writes. (`ExtractAndIngestAsync` returns `Skipped` before any HTTP call when `EnableGraph` is false; covered by `Worker_SkipsGraphExtraction_WhenVersionDoesNotEnableGraph` / `Worker_SourceScope_SkipsGraphExtraction_WhenTargetVersionDoesNotEnableGraph`.)
+- [x] A notebook with `EnableGraph=true` produces entities/facts/edges scoped to the correct `retrieval_version_id` after ingest. (End-to-end orchestration covered by `Worker_RunsGraphExtractionAndSucceeds_WhenVersionEnablesGraph` / `Worker_SourceScope_MarksGraphExtractionSucceeded_WhenTargetVersionEnablesGraph`; the actual Arango write correctness was independently verified in Gate B's RAG-side live-ArangoDB integration tests.)
+- [x] An extraction failure leaves the source `Ingested` with vector/BM25 search intact, and is visible in job status. (`Worker_MarksGraphExtractionFailed_ButIngestionStillSucceeds_WhenAiServerErrors`: job stays `Succeeded`, source stays `Ingested`, `GraphExtractionStatus` is `Failed`.)
 
 ### Gate C — Graph-aware retrieval branch
 

@@ -105,6 +105,7 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             e.Property(j => j.JobType).HasMaxLength(32).IsRequired();
             e.Property(j => j.Status).HasMaxLength(32).IsRequired();
             e.Property(j => j.LastError).HasColumnType("text");
+            e.Property(j => j.GraphExtractionStatus).HasMaxLength(16);
             e.Property(j => j.AvailableAt).HasColumnType("datetime");
             e.Property(j => j.StartedAt).HasColumnType("datetime");
             e.Property(j => j.CompletedAt).HasColumnType("datetime");
@@ -297,6 +298,7 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             e.Property(j => j.PreviousRetrievalVersionId).HasMaxLength(36);
             e.Property(j => j.Status).HasMaxLength(16).IsRequired();
             e.Property(j => j.LastError).HasColumnType("text");
+            e.Property(j => j.GraphExtractionStatus).HasMaxLength(16);
             e.Property(j => j.AvailableAt).HasColumnType("datetime");
             e.Property(j => j.StartedAt).HasColumnType("datetime");
             e.Property(j => j.CompletedAt).HasColumnType("datetime");
