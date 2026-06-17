@@ -46,6 +46,44 @@ class SourceContentResponse(BaseModel):
     truncated: bool
 
 
+class GraphMention(BaseModel):
+    entity_name: str
+    entity_type: str = "unknown"
+
+
+class GraphFactParticipant(BaseModel):
+    entity_name: str
+    role: str
+
+
+class GraphFact(BaseModel):
+    predicate: str
+    statement_text: str = ""
+    confidence: float = 0.0
+    participants: list[GraphFactParticipant] = Field(default_factory=list)
+
+
+class ChunkExtraction(BaseModel):
+    chunk_index: int
+    mentions: list[GraphMention] = Field(default_factory=list)
+    facts: list[GraphFact] = Field(default_factory=list)
+
+
+class GraphIngestRequest(BaseModel):
+    source_id: str
+    notebook_id: str
+    user_id: str
+    retrieval_version_id: str | None = None
+    chunk_extractions: list[ChunkExtraction]
+
+
+class GraphIngestResponse(BaseModel):
+    entities_written: int
+    facts_written: int
+    edges_written: int
+    skipped_chunks: list[int] = Field(default_factory=list)
+
+
 class ExperimentConfig(BaseModel):
     modes: list[str] = Field(default_factory=lambda: ["vector", "bm25", "hybrid"])
     top_k: int = 5

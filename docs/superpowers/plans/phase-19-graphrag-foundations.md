@@ -141,10 +141,10 @@ No new tables. No new UI surface beyond adding `graph_hybrid` to the existing mo
 - [ ] Add `correlation_id` forwarding per existing convention (`rag_client.py` / `be_client.py` pattern).
 
 **RAG server**
-- [ ] Add `POST /graph/ingest`: input `{ source_id, notebook_id, user_id, retrieval_version_id, chunk_extractions[] }`.
-- [ ] Implement deterministic resolver: NFKC normalize → case-fold → strip punctuation → collapse whitespace → merge aliases within the same `(notebook_id, retrieval_version_id)` scope.
-- [ ] Implement assembler: write `entities` (upsert by deterministic `_key`), `facts`, and the three edge collections in one batch, atomically per collection (mirrors existing `store_chunks` batching).
-- [ ] Add `DELETE` cleanup path mirroring `delete_chunks(retrieval_version_id=...)` so graph data is retired exactly when a version's chunks are.
+- [x] Add `POST /graph/ingest`: input `{ source_id, notebook_id, user_id, retrieval_version_id, chunk_extractions[] }`.
+- [x] Implement deterministic resolver: NFKC normalize → case-fold → strip punctuation → collapse whitespace → merge aliases within the same `(notebook_id, retrieval_version_id)` scope. (`app/graph_ingest.py:normalize_entity_name`.)
+- [x] Implement assembler: write `entities` (upsert by deterministic `_key`), `facts`, and the three edge collections in one batch, atomically per collection (mirrors existing `store_chunks` batching). Uses `overwrite_mode="replace"` so retried/re-run ingests upsert instead of duplicating.
+- [x] Add `DELETE` cleanup path mirroring `delete_chunks(retrieval_version_id=...)` so graph data is retired exactly when a version's chunks are. Implemented as `vector_store.delete_graph_payload`, called from the existing `DELETE /notebooks/{notebook_id}/chunks` handler in lockstep with `delete_version_chunks` rather than as a separate endpoint BE would need to remember to call.
 
 **BE**
 - [ ] Add `EnableGraph`, `GraphExtractionModel`, `MaxGraphHops`, `MaxFactHits` to `NotebookRetrievalVersion` + migration + model snapshot.

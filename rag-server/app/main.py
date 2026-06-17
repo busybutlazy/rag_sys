@@ -8,12 +8,14 @@ from app.models import (
     BenchmarkResponse,
     ExperimentRecord,
     ExperimentRunRequest,
+    GraphIngestRequest,
+    GraphIngestResponse,
     IngestRequest,
     SearchResponse,
     SourceContentResponse,
 )
 from app.rag_config import current_config, validate_config
-from app import chunker, embedder, experiments, vector_store
+from app import chunker, embedder, experiments, graph_ingest, vector_store
 from app.metrics import metrics, observe_http
 
 configure_json_logging()
@@ -142,6 +144,24 @@ async def ingest(
         raise HTTPException(status_code=500, detail=str(exc))
 
 
+@app.post("/graph/ingest", response_model=GraphIngestResponse, status_code=200)
+async def graph_ingest_endpoint(
+    req: GraphIngestRequest,
+    x_internal_secret: str | None = Header(default=None),
+):
+    _check_secret(x_internal_secret)
+    db = get_db()
+    result = graph_ingest.resolve_and_assemble(
+        db,
+        req.source_id,
+        req.notebook_id,
+        req.user_id,
+        req.retrieval_version_id,
+        [c.model_dump() for c in req.chunk_extractions],
+    )
+    return result
+
+
 @app.get("/search/vector", response_model=SearchResponse)
 async def search_vector(
     q: str = Query(..., description="Query text"),
@@ -268,7 +288,12 @@ async def delete_notebook_version_chunks(
     x_internal_secret: str | None = Header(default=None),
 ):
     _check_secret(x_internal_secret)
-    vector_store.delete_version_chunks(get_db(), notebook_id, user_id, retrieval_version_id)
+    db = get_db()
+    vector_store.delete_version_chunks(db, notebook_id, user_id, retrieval_version_id)
+    # Graph data (Phase 19) is retired in lockstep with the chunks it was
+    # extracted from -- a pruned/inactive version should not leave orphaned
+    # entities/facts behind.
+    vector_store.delete_graph_payload(db, notebook_id, user_id, retrieval_version_id)
 
 
 @app.get("/documents/{source_id}/content", response_model=SourceContentResponse)

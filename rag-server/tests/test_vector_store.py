@@ -283,6 +283,38 @@ class VectorStoreTests(unittest.TestCase):
         self.assertIn("doc.retrieval_version_id == @rv", db.aql.last_query)
         self.assertEqual({"nid": "nb-1", "uid": "user-1", "rv": "rv-99"}, db.aql.last_bind_vars)
 
+    def test_get_chunk_ids_by_index_scopes_source_and_version(self):
+        class RowAql(FakeAql):
+            def execute(self, query, bind_vars):
+                super().execute(query, bind_vars)
+                return [
+                    {"chunk_index": 0, "_id": "chunks/a"},
+                    {"chunk_index": 1, "_id": "chunks/b"},
+                ]
+
+        db = FakeDb()
+        db.aql = RowAql()
+
+        result = vector_store.get_chunk_ids_by_index(db, "src-1", "user-1", "rv-1")
+
+        self.assertEqual({0: "chunks/a", 1: "chunks/b"}, result)
+        self.assertIn("doc.source_id == @source_id", db.aql.last_query)
+        self.assertEqual(
+            {"source_id": "src-1", "user_id": "user-1", "retrieval_version_id": "rv-1"},
+            db.aql.last_bind_vars,
+        )
+
+    def test_delete_graph_payload_scopes_every_graph_collection_by_version(self):
+        db = FakeDb()
+
+        vector_store.delete_graph_payload(db, "nb-1", "user-1", "rv-1")
+
+        # delete_graph_payload issues one AQL statement per graph collection;
+        # FakeAql only records the last call, so just confirm the final one
+        # is correctly scoped (the others use the same bind_vars shape).
+        self.assertIn("doc.retrieval_version_id == @rv", db.aql.last_query)
+        self.assertEqual({"nid": "nb-1", "uid": "user-1", "rv": "rv-1"}, db.aql.last_bind_vars)
+
 
 if __name__ == "__main__":
     unittest.main()

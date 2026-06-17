@@ -330,6 +330,47 @@ def search_hybrid(
     return [chunk_map[k] for k in sorted_keys[:top_k]]
 
 
+def get_chunk_ids_by_index(
+    db,
+    source_id: str,
+    user_id: str,
+    retrieval_version_id: str | None = None,
+) -> dict[int, str]:
+    """Map chunk_index -> Arango _id for a source, scoped like every other query.
+
+    Used by the graph assembler (Gate B) to attach mention/fact edges to the
+    chunk a piece of extracted text actually came from.
+    """
+    aql = """
+    FOR doc IN chunks
+      FILTER doc.source_id == @source_id
+        AND doc.user_id == @user_id
+        AND (@retrieval_version_id == null OR doc.retrieval_version_id == @retrieval_version_id)
+      RETURN { chunk_index: doc.chunk_index, _id: doc._id }
+    """
+    cursor = db.aql.execute(
+        aql,
+        bind_vars={
+            "source_id": source_id,
+            "user_id": user_id,
+            "retrieval_version_id": retrieval_version_id,
+        },
+    )
+    return {row["chunk_index"]: row["_id"] for row in cursor}
+
+
+def delete_graph_payload(db, notebook_id: str, user_id: str, retrieval_version_id: str) -> None:
+    """Delete entities/facts/edges for a retrieval version, mirroring
+    delete_version_chunks so graph data is retired exactly when a version's
+    chunks are."""
+    for collection in ("entities", "facts", "chunk_mentions_entity", "fact_has_participant", "fact_supported_by_chunk"):
+        db.aql.execute(
+            f"FOR doc IN {collection} FILTER doc.notebook_id == @nid AND doc.user_id == @uid "
+            f"AND doc.retrieval_version_id == @rv REMOVE doc IN {collection}",
+            bind_vars={"nid": notebook_id, "uid": user_id, "rv": retrieval_version_id},
+        )
+
+
 def get_source_content(
     db,
     source_id: str,
