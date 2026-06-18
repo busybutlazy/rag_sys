@@ -151,15 +151,18 @@ async def graph_ingest_endpoint(
 ):
     _check_secret(x_internal_secret)
     db = get_db()
-    result = graph_ingest.resolve_and_assemble(
-        db,
-        req.source_id,
-        req.notebook_id,
-        req.user_id,
-        req.retrieval_version_id,
-        [c.model_dump() for c in req.chunk_extractions],
-    )
-    return result
+    try:
+        result = graph_ingest.resolve_and_assemble(
+            db,
+            req.source_id,
+            req.notebook_id,
+            req.user_id,
+            req.retrieval_version_id,
+            [c.model_dump() for c in req.chunk_extractions],
+        )
+        return result
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
 
 
 @app.get("/search/vector", response_model=SearchResponse)
