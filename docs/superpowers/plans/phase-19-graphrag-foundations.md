@@ -160,16 +160,18 @@ Additionally verified the real cross-service chain with no mocks: brought up liv
 
 ### Gate C — Graph-aware retrieval branch
 
-- [ ] Add `graph_hybrid` as a valid `search_mode` value in RAG `models.py` / `rag_config.py` validation.
-- [ ] Implement graph branch in `vector_store.py`: seed from top-N vector hits' chunks → traverse `chunk_mentions_entity` → `fact_has_participant` → `fact_supported_by_chunk` → verbalized fact text, capped by `max_graph_hops` / `max_fact_hits`.
-- [ ] Fuse graph branch results into the existing Python-side RRF alongside vector + BM25 (do not add an AQL join — matches `graph`'s own design choice and keeps fusion logic in one place).
-- [ ] Extend `/search/hybrid` and `/search/benchmark` to accept `search_mode=graph_hybrid` and return graph-branch provenance (`fact_id`, `participant entities`) alongside the existing chunk identity fields.
-- [ ] Respect `retrieval_version_id` scoping exactly like every other mode (Phase 18's isolation guarantee must hold for the new mode too).
+- [x] Add `graph_hybrid` as a valid `search_mode` value in RAG `models.py` / `rag_config.py` validation. `rag_config.VALID_SEARCH_MODES` now includes it and `validate_config` rejects anything outside the set (previously `search_mode` wasn't validated at all).
+- [x] Implement graph branch in `vector_store.py`: seed from top-N vector hits' chunks → traverse `chunk_mentions_entity` → `fact_has_participant` → `fact_supported_by_chunk` → verbalized fact text, capped by `max_graph_hops` / `max_fact_hits`. See `search_graph_branch` and its `_resolve_chunk_doc_ids` / `_entity_ids_mentioned_by_chunks` / `_expand_fact_ids` helpers.
+- [x] Fuse graph branch results into the existing Python-side RRF alongside vector + BM25 (do not add an AQL join — matches `graph`'s own design choice and keeps fusion logic in one place). See `search_graph_hybrid`.
+- [x] Extend `/search/hybrid` and `/search/benchmark` to accept `search_mode=graph_hybrid` and return graph-branch provenance (`fact_id`, `participant entities`) alongside the existing chunk identity fields. Added a sibling `/search/graph_hybrid` endpoint (matching the existing per-mode path convention of `/search/vector`, `/search/bm25`, `/search/hybrid`) and extended `BenchmarkResponse` with a `graph_hybrid` field.
+- [x] Respect `retrieval_version_id` scoping exactly like every other mode (Phase 18's isolation guarantee must hold for the new mode too). Every intermediate AQL step in `search_graph_branch` filters on `retrieval_version_id`; verified against live ArangoDB with two versions sharing the same chunk_index/entity name (see acceptance evidence below).
 
 **Acceptance**
-- [ ] `graph_hybrid` on a non-graph-enabled version behaves identically to `hybrid` (no entities/facts exist, branch is a no-op) — never errors.
-- [ ] `graph_hybrid` on a graph-enabled version returns at least one result with fact provenance when the underlying corpus supports it.
-- [ ] Cross-version graph data never leaks (same isolation tests as Phase 18 Gate A, extended to the new collections).
+- [x] `graph_hybrid` on a non-graph-enabled version behaves identically to `hybrid` (no entities/facts exist, branch is a no-op) — never errors. Unit-tested (`test_search_graph_hybrid_behaves_like_hybrid_when_no_graph_data`, `test_search_graph_branch_returns_empty_on_a_non_graph_enabled_version`) and confirmed live: every intermediate lookup in `search_graph_branch` returns `[]` rather than raising when entity/fact collections have no matching rows.
+- [x] `graph_hybrid` on a graph-enabled version returns at least one result with fact provenance when the underlying corpus supports it. Verified two ways: (1) unit test `test_search_graph_branch_returns_fact_provenance_for_one_hop` / `test_search_graph_hybrid_fuses_graph_branch_with_vector_and_bm25` against fakes; (2) a live end-to-end run against real `arangodb` (real chunk + real vector index + `graph_ingest.resolve_and_assemble` + `search_graph_hybrid`) returned `{'fact_id': '4563d5fb...', 'fact_text': 'Grace Hopper invented the COBOL compiler.', 'participants': ['grace hopper']}` attached to the correct chunk.
+- [x] Cross-version graph data never leaks (same isolation tests as Phase 18 Gate A, extended to the new collections). `tests/test_graph_search_integration.py` seeds two retrieval versions with the *same* chunk_index and *same* entity name on purpose and proves against live Arango that each version's `search_graph_branch` only ever resolves its own fact (different deterministic fact ids), and that an unrelated `retrieval_version_id` finds nothing.
+
+Implementation note: a graph-data-only `_seed_graph_payload` helper in `tests/test_vector_store_integration.py` (added during the Gate B review-fix pass) seeded chunk documents without an `embedding` field and never cleaned them up, which broke `ensure_vector_index` on the next `rag-server` restart (`IndexCreateError: vector field not present`). Fixed during Gate C by switching those seed inserts to `overwrite_mode="replace"` and registering `addCleanup` to delete the seeded chunk — confirmed by restarting `rag-server` against the now-clean database and a successful `/health` check.
 
 ### Gate D — Lab retrieval-bench integration
 

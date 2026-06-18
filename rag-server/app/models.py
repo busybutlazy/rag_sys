@@ -25,6 +25,9 @@ class ChunkResult(BaseModel):
     source_id: str
     chunk_index: int
     text: str
+    fact_id: str | None = None
+    fact_text: str | None = None
+    participants: list[str] | None = None
 
 
 class SearchResponse(BaseModel):
@@ -36,6 +39,7 @@ class BenchmarkResponse(BaseModel):
     vector: list[ChunkResult]
     bm25: list[ChunkResult]
     hybrid: list[ChunkResult]
+    graph_hybrid: list[ChunkResult] = Field(default_factory=list)
 
 
 class SourceContentResponse(BaseModel):

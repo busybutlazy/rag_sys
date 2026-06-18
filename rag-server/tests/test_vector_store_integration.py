@@ -70,6 +70,12 @@ class VectorStoreGraphSchemaIntegrationTests(unittest.TestCase):
             self.assertTrue(self.db.has_collection(name))
 
     def _seed_graph_payload(self, notebook_id, user_id, source_id, retrieval_version_id):
+        # overwrite_mode="replace" so re-running this suite against a
+        # persistent local ArangoDB (no fixture reset between runs) doesn't
+        # fail on a stale doc left over from a prior run -- the deterministic
+        # keys here are deliberately fixed per (notebook_id, version) so the
+        # _graph_counts assertions stay predictable, not because the docs are
+        # meant to be unique-per-run.
         chunk_key = f"chunk-{notebook_id}-{retrieval_version_id}"
         self.db.collection("chunks").insert({
             "_key": chunk_key,
@@ -79,7 +85,12 @@ class VectorStoreGraphSchemaIntegrationTests(unittest.TestCase):
             "retrieval_version_id": retrieval_version_id,
             "chunk_index": 0,
             "text": "seed",
-        })
+        }, overwrite_mode="replace")
+        # These chunks deliberately have no `embedding` field, which is fine
+        # for the graph-payload assertions below, but they must not survive
+        # the test: ensure_vector_index() (run on every rag-server startup)
+        # fails outright if any chunk document lacks the vector field.
+        self.addCleanup(self._delete_seeded_chunk, chunk_key)
         entity_key = f"entity-{notebook_id}-{retrieval_version_id}"
         self.db.collection("entities").insert({
             "_key": entity_key,
@@ -87,7 +98,7 @@ class VectorStoreGraphSchemaIntegrationTests(unittest.TestCase):
             "user_id": user_id,
             "retrieval_version_id": retrieval_version_id,
             "canonical_name": "seed entity",
-        })
+        }, overwrite_mode="replace")
         fact_key = f"fact-{notebook_id}-{retrieval_version_id}"
         self.db.collection("facts").insert({
             "_key": fact_key,
@@ -95,7 +106,7 @@ class VectorStoreGraphSchemaIntegrationTests(unittest.TestCase):
             "user_id": user_id,
             "retrieval_version_id": retrieval_version_id,
             "predicate": "seed predicate",
-        })
+        }, overwrite_mode="replace")
         self.db.collection("chunk_mentions_entity").insert({
             "_key": f"mention-{notebook_id}-{retrieval_version_id}",
             "_from": f"chunks/{chunk_key}",
@@ -103,7 +114,7 @@ class VectorStoreGraphSchemaIntegrationTests(unittest.TestCase):
             "notebook_id": notebook_id,
             "user_id": user_id,
             "retrieval_version_id": retrieval_version_id,
-        })
+        }, overwrite_mode="replace")
         self.db.collection("fact_supported_by_chunk").insert({
             "_key": f"supports-{notebook_id}-{retrieval_version_id}",
             "_from": f"facts/{fact_key}",
@@ -111,7 +122,7 @@ class VectorStoreGraphSchemaIntegrationTests(unittest.TestCase):
             "notebook_id": notebook_id,
             "user_id": user_id,
             "retrieval_version_id": retrieval_version_id,
-        })
+        }, overwrite_mode="replace")
         self.db.collection("fact_has_participant").insert({
             "_key": f"participant-{notebook_id}-{retrieval_version_id}",
             "_from": f"facts/{fact_key}",
@@ -120,7 +131,12 @@ class VectorStoreGraphSchemaIntegrationTests(unittest.TestCase):
             "notebook_id": notebook_id,
             "user_id": user_id,
             "retrieval_version_id": retrieval_version_id,
-        })
+        }, overwrite_mode="replace")
+
+    def _delete_seeded_chunk(self, chunk_key):
+        chunks_col = self.db.collection("chunks")
+        if chunks_col.has(chunk_key):
+            chunks_col.delete(chunk_key)
 
     def _graph_counts(self, notebook_id, user_id):
         counts = {}
@@ -165,6 +181,7 @@ class VectorStoreGraphSchemaIntegrationTests(unittest.TestCase):
         user_id = "it-user-source-wipe"
         self._seed_graph_payload(notebook_id, user_id, "src-keep", "rv-1")
         self._seed_graph_payload(notebook_id, user_id, "src-remove", "rv-2")
+        self.addCleanup(vector_store.delete_all_notebook_graph_payload, self.db, notebook_id, user_id)
 
         vector_store.delete_source_graph_payload(self.db, "src-remove", user_id)
 

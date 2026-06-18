@@ -221,6 +221,38 @@ async def search_hybrid_endpoint(
     return SearchResponse(results=results)
 
 
+@app.get("/search/graph_hybrid", response_model=SearchResponse)
+async def search_graph_hybrid_endpoint(
+    q: str = Query(..., description="Query text"),
+    notebook_id: str = Query(..., description="Notebook to search within"),
+    user_id: str = Query(..., description="Owner scope for the notebook"),
+    top_k: int = Query(default=None, ge=1, le=20),
+    alpha: float = Query(default=None, ge=0.0, le=1.0, description="Vector weight (1-alpha goes to BM25)"),
+    max_graph_hops: int = Query(default=1, ge=1, le=5),
+    max_fact_hits: int = Query(default=8, ge=1, le=50),
+    retrieval_version_id: str | None = Query(default=None, description="Optional retrieval version scope"),
+    x_internal_secret: str | None = Header(default=None),
+):
+    _check_secret(x_internal_secret)
+    metrics.increment("search_graph_hybrid")
+    effective_top_k = top_k if top_k is not None else _cfg.top_k
+    effective_alpha = alpha if alpha is not None else _cfg.hybrid_alpha
+    query_embedding = await embedder.embed(q)
+    results = vector_store.search_graph_hybrid(
+        get_db(),
+        query_embedding,
+        q,
+        notebook_id,
+        user_id,
+        effective_top_k,
+        effective_alpha,
+        retrieval_version_id,
+        max_graph_hops,
+        max_fact_hits,
+    )
+    return SearchResponse(results=results)
+
+
 @app.get("/search/benchmark", response_model=BenchmarkResponse)
 async def search_benchmark(
     q: str = Query(..., description="Query text"),
@@ -239,11 +271,15 @@ async def search_benchmark(
     hybrid_results = vector_store.search_hybrid(
         db, query_embedding, q, notebook_id, user_id, effective_top_k, retrieval_version_id=retrieval_version_id
     )
+    graph_hybrid_results = vector_store.search_graph_hybrid(
+        db, query_embedding, q, notebook_id, user_id, effective_top_k, retrieval_version_id=retrieval_version_id
+    )
     return BenchmarkResponse(
         query=q,
         vector=vec_results,
         bm25=bm25_results,
         hybrid=hybrid_results,
+        graph_hybrid=graph_hybrid_results,
     )
 
 

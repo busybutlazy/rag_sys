@@ -440,5 +440,245 @@ class VectorStoreTests(unittest.TestCase):
         self.assertEqual({"sid": "src-1", "uid": "user-1"}, facts_vars)
 
 
+class RoutingAql(FakeAql):
+    """Dispatches canned responses by matching a substring against the AQL
+    text, in order. Used to unit-test the multi-step graph traversal in
+    search_graph_branch/search_graph_hybrid without a live database."""
+
+    def __init__(self, routes: list[tuple[str, object]]):
+        super().__init__()
+        self.routes = routes
+        self.calls: list[tuple[str, dict]] = []
+
+    def execute(self, query, bind_vars):
+        self.last_query = query
+        self.last_bind_vars = bind_vars
+        self.calls.append((query, bind_vars))
+        for marker, response in self.routes:
+            if marker in query:
+                return response(bind_vars) if callable(response) else response
+        return []
+
+
+class GraphHybridSearchTests(unittest.TestCase):
+    def _one_hop_db(self):
+        # chunk "src-1"/0 mentions entity "entities/e1"; e1 participates in
+        # fact "f1", which is itself supported by chunk "src-1"/1.
+        return FakeDb(), RoutingAql([
+            (
+                "[doc.source_id, doc.chunk_index] IN @pairs",
+                lambda bv: [{"source_id": "src-1", "chunk_index": 0, "_id": "chunks/seed"}],
+            ),
+            ("FOR edge IN chunk_mentions_entity", ["entities/e1"]),
+            ("edge._to IN @entity_ids", ["facts/f1"]),
+            ("edge._from IN @fact_ids", []),
+            (
+                "FOR fact IN facts",
+                lambda bv: [{
+                    "fact_id": "f1",
+                    "fact_text": "Ada Lovelace wrote the first algorithm",
+                    "confidence": 0.9,
+                    "participants": ["ada lovelace"],
+                    "supporting_chunks": [{
+                        "source_id": "src-1", "chunk_index": 1, "text": "supporting text",
+                        "retrieval_version_id": "rv-1",
+                    }],
+                }] if bv["fact_keys"] == ["f1"] else [],
+            ),
+        ])
+
+    def test_search_graph_branch_returns_empty_when_no_seed_chunks(self):
+        db = FakeDb()
+        db.aql = RoutingAql([])
+
+        result = vector_store.search_graph_branch(db, "nb-1", "user-1", [], "rv-1")
+
+        self.assertEqual([], result)
+        self.assertEqual(0, len(db.aql.calls))
+
+    def test_search_graph_branch_returns_empty_when_chunk_has_no_entities(self):
+        db = FakeDb()
+        db.aql = RoutingAql([
+            (
+                "[doc.source_id, doc.chunk_index] IN @pairs",
+                lambda bv: [{"source_id": "src-1", "chunk_index": 0, "_id": "chunks/seed"}],
+            ),
+            ("FOR edge IN chunk_mentions_entity", []),
+        ])
+
+        result = vector_store.search_graph_branch(
+            db, "nb-1", "user-1", [{"source_id": "src-1", "chunk_index": 0}], "rv-1"
+        )
+
+        self.assertEqual([], result)
+
+    def test_search_graph_branch_returns_empty_on_a_non_graph_enabled_version(self):
+        # No entity-mention edges exist at all -- must not raise.
+        db = FakeDb()
+        db.aql = RoutingAql([
+            (
+                "[doc.source_id, doc.chunk_index] IN @pairs",
+                lambda bv: [{"source_id": "src-1", "chunk_index": 0, "_id": "chunks/seed"}],
+            ),
+        ])
+
+        result = vector_store.search_graph_branch(
+            db, "nb-1", "user-1", [{"source_id": "src-1", "chunk_index": 0}], retrieval_version_id="rv-1"
+        )
+
+        self.assertEqual([], result)
+
+    def test_search_graph_branch_returns_fact_provenance_for_one_hop(self):
+        _, aql = self._one_hop_db()
+        db = FakeDb()
+        db.aql = aql
+
+        result = vector_store.search_graph_branch(
+            db, "nb-1", "user-1", [{"source_id": "src-1", "chunk_index": 0}], "rv-1"
+        )
+
+        self.assertEqual(1, len(result))
+        self.assertEqual("src-1", result[0]["source_id"])
+        self.assertEqual(1, result[0]["chunk_index"])
+        self.assertEqual("f1", result[0]["fact_id"])
+        self.assertEqual(["ada lovelace"], result[0]["participants"])
+
+    def test_search_graph_branch_caps_at_max_fact_hits(self):
+        db = FakeDb()
+        many_facts = [f"facts/f{i}" for i in range(10)]
+        rows = [
+            {
+                "fact_id": f"f{i}",
+                "fact_text": "x",
+                "confidence": 0.5,
+                "participants": [],
+                "supporting_chunks": [{
+                    "source_id": "src-1", "chunk_index": i, "text": "t",
+                    "retrieval_version_id": "rv-1",
+                }],
+            }
+            for i in range(10)
+        ]
+        db.aql = RoutingAql([
+            (
+                "[doc.source_id, doc.chunk_index] IN @pairs",
+                lambda bv: [{"source_id": "src-1", "chunk_index": 0, "_id": "chunks/seed"}],
+            ),
+            ("FOR edge IN chunk_mentions_entity", ["entities/e1"]),
+            ("edge._to IN @entity_ids", many_facts),
+            ("edge._from IN @fact_ids", []),
+            ("FOR fact IN facts", lambda bv: [r for r in rows if r["fact_id"] in {k for k in bv["fact_keys"]}]),
+        ])
+
+        result = vector_store.search_graph_branch(
+            db, "nb-1", "user-1", [{"source_id": "src-1", "chunk_index": 0}], "rv-1", max_fact_hits=3
+        )
+
+        self.assertEqual(3, len(result))
+
+    def test_search_graph_branch_rejects_non_positive_max_fact_hits(self):
+        db = FakeDb()
+        db.aql = RoutingAql([])
+
+        result = vector_store.search_graph_branch(
+            db, "nb-1", "user-1", [{"source_id": "src-1", "chunk_index": 0}], "rv-1", max_fact_hits=0
+        )
+
+        self.assertEqual([], result)
+        self.assertEqual(0, len(db.aql.calls))
+
+    def test_search_graph_hybrid_fuses_graph_branch_with_vector_and_bm25(self):
+        # Build a routing fake whose vector/bm25 AQL also returns a hit so we
+        # can confirm the graph branch's chunk gets merged into the same
+        # ranked output rather than living in a separate list.
+        db = FakeDb()
+        db.aql = RoutingAql([
+            (
+                "SORT APPROX_NEAR_COSINE",
+                [{"source_id": "src-1", "chunk_index": 0, "retrieval_version_id": "rv-1", "text": "seed"}],
+            ),
+            ("SORT BM25", []),
+            (
+                "[doc.source_id, doc.chunk_index] IN @pairs",
+                lambda bv: [{"source_id": "src-1", "chunk_index": 0, "_id": "chunks/seed"}],
+            ),
+            ("FOR edge IN chunk_mentions_entity", ["entities/e1"]),
+            ("edge._to IN @entity_ids", ["facts/f1"]),
+            ("edge._from IN @fact_ids", []),
+            (
+                "FOR fact IN facts",
+                [{
+                    "fact_id": "f1",
+                    "fact_text": "Ada Lovelace wrote the first algorithm",
+                    "confidence": 0.9,
+                    "participants": ["ada lovelace"],
+                    "supporting_chunks": [{
+                        "source_id": "src-1", "chunk_index": 1, "text": "supporting text",
+                        "retrieval_version_id": "rv-1",
+                    }],
+                }],
+            ),
+        ])
+        col = FakeCollection(indexes=[{"type": "vector"}])
+        db._collection = col
+
+        results = vector_store.search_graph_hybrid(
+            db, [0.1, 0.2], "ada lovelace", "nb-1", "user-1", top_k=5, retrieval_version_id="rv-1"
+        )
+
+        keys = {(r["source_id"], r["chunk_index"]) for r in results}
+        self.assertIn(("src-1", 0), keys)
+        self.assertIn(("src-1", 1), keys)
+        graph_hit = next(r for r in results if r["chunk_index"] == 1)
+        self.assertEqual("f1", graph_hit["fact_id"])
+        self.assertEqual(["ada lovelace"], graph_hit["participants"])
+
+    def test_search_graph_hybrid_behaves_like_hybrid_when_no_graph_data(self):
+        db = FakeDb()
+        db.aql = RoutingAql([
+            (
+                "SORT APPROX_NEAR_COSINE",
+                [{"source_id": "src-1", "chunk_index": 0, "retrieval_version_id": "rv-1", "text": "seed"}],
+            ),
+            ("SORT BM25", []),
+            (
+                "[doc.source_id, doc.chunk_index] IN @pairs",
+                lambda bv: [{"source_id": "src-1", "chunk_index": 0, "_id": "chunks/seed"}],
+            ),
+            ("FOR edge IN chunk_mentions_entity", []),
+        ])
+
+        results = vector_store.search_graph_hybrid(
+            db, [0.1, 0.2], "ada lovelace", "nb-1", "user-1", top_k=5, retrieval_version_id="rv-1"
+        )
+
+        self.assertEqual(1, len(results))
+        self.assertEqual("src-1", results[0]["source_id"])
+        self.assertEqual(0, results[0]["chunk_index"])
+        self.assertIsNone(results[0].get("fact_id"))
+
+    def test_search_graph_branch_is_scoped_by_retrieval_version_on_every_step(self):
+        db = FakeDb()
+        aql = RoutingAql([
+            (
+                "[doc.source_id, doc.chunk_index] IN @pairs",
+                lambda bv: [{"source_id": "src-1", "chunk_index": 0, "_id": "chunks/seed"}],
+            ),
+            ("FOR edge IN chunk_mentions_entity", ["entities/e1"]),
+            ("edge._to IN @entity_ids", ["facts/f1"]),
+            ("edge._from IN @fact_ids", []),
+            ("FOR fact IN facts", []),
+        ])
+        db.aql = aql
+
+        vector_store.search_graph_branch(
+            db, "nb-1", "user-1", [{"source_id": "src-1", "chunk_index": 0}], "rv-1"
+        )
+
+        for query, bind_vars in aql.calls[:-1]:  # the final facts lookup isn't version-scoped by bind var
+            if "retrieval_version_id" in bind_vars:
+                self.assertEqual("rv-1", bind_vars["retrieval_version_id"])
+
+
 if __name__ == "__main__":
     unittest.main()

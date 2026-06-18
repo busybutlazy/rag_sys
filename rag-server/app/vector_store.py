@@ -334,6 +334,276 @@ def search_hybrid(
     return [chunk_map[k] for k in sorted_keys[:top_k]]
 
 
+def _resolve_chunk_doc_ids(
+    db,
+    notebook_id: str,
+    user_id: str,
+    retrieval_version_id: str | None,
+    chunk_keys: list[tuple[str, int]],
+) -> dict[tuple[str, int], str]:
+    """Map (source_id, chunk_index) pairs to chunk _ids, scoped like every
+    other graph query. Chunk _keys are random UUIDs (see ensure_collections),
+    so callers that only have source_id/chunk_index must resolve through
+    this lookup before traversing graph edges."""
+    if not chunk_keys:
+        return {}
+    pairs = [[source_id, chunk_index] for source_id, chunk_index in chunk_keys]
+    aql = """
+    FOR doc IN chunks
+      FILTER doc.notebook_id == @notebook_id
+        AND doc.user_id == @user_id
+        AND (@retrieval_version_id == null OR doc.retrieval_version_id == @retrieval_version_id)
+        AND [doc.source_id, doc.chunk_index] IN @pairs
+      RETURN { source_id: doc.source_id, chunk_index: doc.chunk_index, _id: doc._id }
+    """
+    cursor = db.aql.execute(
+        aql,
+        bind_vars={
+            "notebook_id": notebook_id,
+            "user_id": user_id,
+            "retrieval_version_id": retrieval_version_id,
+            "pairs": pairs,
+        },
+    )
+    return {(row["source_id"], row["chunk_index"]): row["_id"] for row in cursor}
+
+
+def _entity_ids_mentioned_by_chunks(
+    db, chunk_doc_ids: list[str], notebook_id: str, user_id: str, retrieval_version_id: str | None
+) -> list[str]:
+    if not chunk_doc_ids:
+        return []
+    aql = """
+    FOR edge IN chunk_mentions_entity
+      FILTER edge._from IN @chunk_ids
+        AND edge.notebook_id == @notebook_id
+        AND edge.user_id == @user_id
+        AND (@retrieval_version_id == null OR edge.retrieval_version_id == @retrieval_version_id)
+      RETURN DISTINCT edge._to
+    """
+    cursor = db.aql.execute(
+        aql,
+        bind_vars={
+            "chunk_ids": chunk_doc_ids,
+            "notebook_id": notebook_id,
+            "user_id": user_id,
+            "retrieval_version_id": retrieval_version_id,
+        },
+    )
+    return list(cursor)
+
+
+def _fact_ids_for_entities(
+    db, entity_doc_ids: list[str], notebook_id: str, user_id: str, retrieval_version_id: str | None
+) -> list[str]:
+    if not entity_doc_ids:
+        return []
+    aql = """
+    FOR edge IN fact_has_participant
+      FILTER edge._to IN @entity_ids
+        AND edge.notebook_id == @notebook_id
+        AND edge.user_id == @user_id
+        AND (@retrieval_version_id == null OR edge.retrieval_version_id == @retrieval_version_id)
+      RETURN DISTINCT edge._from
+    """
+    cursor = db.aql.execute(
+        aql,
+        bind_vars={
+            "entity_ids": entity_doc_ids,
+            "notebook_id": notebook_id,
+            "user_id": user_id,
+            "retrieval_version_id": retrieval_version_id,
+        },
+    )
+    return list(cursor)
+
+
+def _entity_ids_participating_in_facts(
+    db, fact_doc_ids: list[str], notebook_id: str, user_id: str, retrieval_version_id: str | None
+) -> list[str]:
+    if not fact_doc_ids:
+        return []
+    aql = """
+    FOR edge IN fact_has_participant
+      FILTER edge._from IN @fact_ids
+        AND edge.notebook_id == @notebook_id
+        AND edge.user_id == @user_id
+        AND (@retrieval_version_id == null OR edge.retrieval_version_id == @retrieval_version_id)
+      RETURN DISTINCT edge._to
+    """
+    cursor = db.aql.execute(
+        aql,
+        bind_vars={
+            "fact_ids": fact_doc_ids,
+            "notebook_id": notebook_id,
+            "user_id": user_id,
+            "retrieval_version_id": retrieval_version_id,
+        },
+    )
+    return list(cursor)
+
+
+def _expand_fact_ids(
+    db,
+    seed_entity_ids: list[str],
+    notebook_id: str,
+    user_id: str,
+    retrieval_version_id: str | None,
+    max_graph_hops: int,
+) -> list[str]:
+    """Walk entity -> fact -> (shared entities) -> fact ... up to
+    max_graph_hops fact-hops, returning every fact id reached, in the order
+    first discovered (closer hops first)."""
+    seen_facts: list[str] = []
+    seen_fact_set: set[str] = set()
+    entity_ids = seed_entity_ids
+    for _ in range(max(1, max_graph_hops)):
+        new_fact_ids = [
+            fid for fid in _fact_ids_for_entities(db, entity_ids, notebook_id, user_id, retrieval_version_id)
+            if fid not in seen_fact_set
+        ]
+        if not new_fact_ids:
+            break
+        seen_fact_set.update(new_fact_ids)
+        seen_facts.extend(new_fact_ids)
+        entity_ids = _entity_ids_participating_in_facts(db, new_fact_ids, notebook_id, user_id, retrieval_version_id)
+    return seen_facts
+
+
+def search_graph_branch(
+    db,
+    notebook_id: str,
+    user_id: str,
+    seed_chunks: list[dict],
+    retrieval_version_id: str | None = None,
+    max_graph_hops: int = 1,
+    max_fact_hits: int = 8,
+) -> list[dict]:
+    """Seed from a set of chunk hits (as returned by search_vector/search_bm25),
+    traverse chunk_mentions_entity -> fact_has_participant -> fact_supported_by_chunk
+    to find related facts, and return them as chunk-shaped candidates carrying
+    fact provenance so they can be fused into the existing RRF alongside
+    vector + BM25 results.
+
+    Never raises: on a non-graph-enabled version (no entities/facts written),
+    every intermediate lookup simply returns empty lists and this function
+    returns []."""
+    if max_fact_hits < 1 or not seed_chunks:
+        return []
+
+    chunk_keys = [(c["source_id"], c["chunk_index"]) for c in seed_chunks]
+    chunk_id_by_key = _resolve_chunk_doc_ids(db, notebook_id, user_id, retrieval_version_id, chunk_keys)
+    seed_chunk_ids = list(chunk_id_by_key.values())
+    if not seed_chunk_ids:
+        return []
+
+    seed_entity_ids = _entity_ids_mentioned_by_chunks(db, seed_chunk_ids, notebook_id, user_id, retrieval_version_id)
+    if not seed_entity_ids:
+        return []
+
+    fact_ids = _expand_fact_ids(db, seed_entity_ids, notebook_id, user_id, retrieval_version_id, max_graph_hops)
+    if not fact_ids:
+        return []
+    fact_ids = fact_ids[:max_fact_hits]
+
+    aql = """
+    FOR fact IN facts
+      FILTER fact._key IN @fact_keys
+      LET participant_names = (
+        FOR edge IN fact_has_participant
+          FILTER edge._from == fact._id
+          FOR entity IN entities
+            FILTER entity._id == edge._to
+            RETURN entity.canonical_name
+      )
+      LET supporting_chunks = (
+        FOR edge IN fact_supported_by_chunk
+          FILTER edge._from == fact._id
+          FOR chunk IN chunks
+            FILTER chunk._id == edge._to
+            RETURN { source_id: chunk.source_id, chunk_index: chunk.chunk_index, text: chunk.text,
+                     retrieval_version_id: chunk.retrieval_version_id }
+      )
+      RETURN { fact_id: fact._key, fact_text: fact.statement_text, confidence: fact.confidence,
+               participants: participant_names, supporting_chunks: supporting_chunks }
+    """
+    fact_keys = [fid.split("/", 1)[1] if "/" in fid else fid for fid in fact_ids]
+    cursor = db.aql.execute(
+        aql,
+        bind_vars={"fact_keys": fact_keys},
+    )
+    fact_rows = list(cursor)
+    fact_rows.sort(key=lambda row: row.get("confidence") or 0.0, reverse=True)
+
+    results: list[dict] = []
+    for row in fact_rows[:max_fact_hits]:
+        for chunk in row["supporting_chunks"]:
+            results.append({
+                "source_id": chunk["source_id"],
+                "chunk_index": chunk["chunk_index"],
+                "retrieval_version_id": chunk["retrieval_version_id"],
+                "text": chunk["text"],
+                "fact_id": row["fact_id"],
+                "fact_text": row["fact_text"],
+                "participants": row["participants"],
+            })
+    return results
+
+
+def search_graph_hybrid(
+    db,
+    query_embedding: list[float],
+    query: str,
+    notebook_id: str,
+    user_id: str,
+    top_k: int = 5,
+    alpha: float = 0.5,
+    retrieval_version_id: str | None = None,
+    max_graph_hops: int = 1,
+    max_fact_hits: int = 8,
+) -> list[dict]:
+    """Like search_hybrid, but also seeds a graph branch from the top vector
+    hits and fuses it into the same Python-side RRF rather than adding a
+    separate AQL join (matches the existing fusion design)."""
+    fetch_k = min(top_k * 3, 60)
+    vec_results = search_vector(db, query_embedding, notebook_id, user_id, fetch_k, retrieval_version_id)
+    bm25_results = search_bm25(db, query, notebook_id, user_id, fetch_k, retrieval_version_id)
+    graph_results = search_graph_branch(
+        db, notebook_id, user_id, vec_results[:top_k], retrieval_version_id, max_graph_hops, max_fact_hits
+    )
+
+    k_rrf = 60
+    scores: dict[tuple, float] = {}
+    chunk_map: dict[tuple, dict] = {}
+    provenance: dict[tuple, dict] = {}
+
+    def add_ranked(results: list[dict], weight: float) -> None:
+        for rank, doc in enumerate(results, start=1):
+            key = (doc["source_id"], doc["chunk_index"])
+            scores[key] = scores.get(key, 0.0) + weight / (k_rrf + rank)
+            chunk_map[key] = doc
+
+    add_ranked(vec_results, alpha)
+    add_ranked(bm25_results, 1.0 - alpha)
+    add_ranked(graph_results, 1.0)
+    for doc in graph_results:
+        key = (doc["source_id"], doc["chunk_index"])
+        provenance[key] = {
+            "fact_id": doc["fact_id"],
+            "fact_text": doc["fact_text"],
+            "participants": doc["participants"],
+        }
+
+    sorted_keys = sorted(scores, key=lambda k: scores[k], reverse=True)
+    results: list[dict] = []
+    for key in sorted_keys[:top_k]:
+        item = dict(chunk_map[key])
+        if key in provenance:
+            item.update(provenance[key])
+        results.append(item)
+    return results
+
+
 def get_chunk_ids_by_index(
     db,
     source_id: str,

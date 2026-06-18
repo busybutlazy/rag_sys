@@ -1,6 +1,8 @@
 import os
 from dataclasses import dataclass
 
+VALID_SEARCH_MODES = {"vector", "bm25", "hybrid", "graph_hybrid"}
+
 
 @dataclass(frozen=True)
 class RagConfig:
@@ -37,6 +39,10 @@ def current_config() -> RagConfig:
 
 
 def validate_config(cfg: RagConfig) -> None:
+    if cfg.search_mode not in VALID_SEARCH_MODES:
+        raise SystemExit(
+            f"RAG_SEARCH_MODE ({cfg.search_mode}) must be one of {sorted(VALID_SEARCH_MODES)}"
+        )
     if cfg.chunk_overlap >= cfg.chunk_size:
         raise SystemExit(
             f"RAG_CHUNK_OVERLAP ({cfg.chunk_overlap}) must be less than "
