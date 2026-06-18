@@ -4,8 +4,14 @@ import uuid
 
 from app.db import get_db
 from app import graph_ingest, vector_store
+from app.embedder import DIMENSIONS
 
 _HAS_LIVE_ARANGO = bool(os.environ.get("ARANGO_URL"))
+# A live `chunks` collection may already have a vector index (lazily created
+# by ensure_vector_index once any document carries an `embedding`). If so,
+# every insert -- including these test fixtures -- must supply a vector of
+# the right dimensionality or ArangoDB rejects the write.
+_DUMMY_EMBEDDING = [0.0] * DIMENSIONS
 
 
 @unittest.skipUnless(
@@ -45,6 +51,7 @@ class GraphSearchIntegrationTests(unittest.TestCase):
             "retrieval_version_id": cls.rv_a,
             "chunk_index": 0,
             "text": "Grace Hopper invented the COBOL compiler.",
+            "embedding": _DUMMY_EMBEDDING,
         })
         chunks_col.insert({
             "_key": cls.chunk_key_b,
@@ -54,6 +61,7 @@ class GraphSearchIntegrationTests(unittest.TestCase):
             "retrieval_version_id": cls.rv_b,
             "chunk_index": 0,
             "text": "Grace Hopper invented the COBOL compiler.",
+            "embedding": _DUMMY_EMBEDDING,
         })
 
         # Same chunk_index and the same mentioned entity name in both
@@ -135,6 +143,109 @@ class GraphSearchIntegrationTests(unittest.TestCase):
         )
 
         self.assertEqual(1, len(results))
+
+
+@unittest.skipUnless(
+    _HAS_LIVE_ARANGO,
+    "requires a live ArangoDB; set ARANGO_URL/ARANGO_DB/ARANGO_USER/ARANGO_PASSWORD "
+    "(see docker compose up -d arangodb arango-init) to run this against the real database",
+)
+class GraphSearchTwoHopIntegrationTests(unittest.TestCase):
+    """Phase 19 Gate C review fix (finding 4): proves max_graph_hops=2 finds
+    a fact reachable only via a second hop, against a real ArangoDB graph --
+    not just that hop-exhaustion terminates cleanly (the single-fact case
+    already covered by GraphSearchIntegrationTests)."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.db = get_db()
+        vector_store.ensure_collections(cls.db)
+        vector_store.ensure_knowledge_graph(cls.db)
+        vector_store.ensure_graph_indexes(cls.db)
+        vector_store.ensure_entities_view(cls.db)
+
+        cls.notebook_id = f"test-nb-{uuid.uuid4().hex[:8]}"
+        cls.user_id = f"test-user-{uuid.uuid4().hex[:8]}"
+        cls.source_id = f"test-src-{uuid.uuid4().hex[:8]}"
+        cls.rv = f"test-rv-{uuid.uuid4().hex[:8]}"
+
+        chunks_col = cls.db.collection("chunks")
+        cls.chunk_key = uuid.uuid4().hex
+        chunks_col.insert({
+            "_key": cls.chunk_key,
+            "source_id": cls.source_id,
+            "notebook_id": cls.notebook_id,
+            "user_id": cls.user_id,
+            "retrieval_version_id": cls.rv,
+            "chunk_index": 0,
+            "text": "Alice co-founded Acme Corp with Bob, who later partnered with Carol.",
+            "embedding": _DUMMY_EMBEDDING,
+        })
+
+        # Two facts in the same chunk extraction, chained through a shared
+        # entity (Bob) that is NOT mentioned directly in the seed chunk's
+        # chunk_mentions_entity edge -- only Alice is. Fact 1 connects Alice
+        # and Bob; fact 2 connects Bob and Carol. Carol/fact 2 is reachable
+        # only by hopping: seed chunk -> Alice -> fact 1 -> Bob -> fact 2.
+        extraction = [{
+            "chunk_index": 0,
+            "mentions": [{"entity_name": "Alice", "entity_type": "person"}],
+            "facts": [
+                {
+                    "predicate": "co_founded_with",
+                    "statement_text": "Alice co-founded Acme Corp with Bob.",
+                    "confidence": 0.9,
+                    "participants": [
+                        {"entity_name": "Alice", "role": "subject"},
+                        {"entity_name": "Bob", "role": "object"},
+                    ],
+                },
+                {
+                    "predicate": "partnered_with",
+                    "statement_text": "Bob partnered with Carol.",
+                    "confidence": 0.85,
+                    "participants": [
+                        {"entity_name": "Bob", "role": "subject"},
+                        {"entity_name": "Carol", "role": "object"},
+                    ],
+                },
+            ],
+        }]
+        cls.result = graph_ingest.resolve_and_assemble(
+            cls.db, cls.source_id, cls.notebook_id, cls.user_id, cls.rv, extraction
+        )
+
+    @classmethod
+    def tearDownClass(cls):
+        vector_store.delete_graph_payload(cls.db, cls.notebook_id, cls.user_id, cls.rv)
+        cls.db.collection("chunks").delete(cls.chunk_key)
+
+    def test_ingest_succeeded(self):
+        self.assertEqual([], self.result["skipped_chunks"])
+
+    def test_second_hop_fact_is_found_when_max_graph_hops_is_2(self):
+        seed = [{"source_id": self.source_id, "chunk_index": 0}]
+
+        results = vector_store.search_graph_branch(
+            self.db, self.notebook_id, self.user_id, seed, retrieval_version_id=self.rv, max_graph_hops=2
+        )
+
+        fact_texts = {r["fact_text"] for r in results}
+        self.assertEqual(2, len(results))
+        self.assertTrue(any("Bob" in t and "Carol" in t for t in fact_texts))
+        self.assertTrue(any("Alice" in t and "Bob" in t for t in fact_texts))
+
+    def test_second_hop_fact_is_not_found_when_max_graph_hops_is_1(self):
+        seed = [{"source_id": self.source_id, "chunk_index": 0}]
+
+        results = vector_store.search_graph_branch(
+            self.db, self.notebook_id, self.user_id, seed, retrieval_version_id=self.rv, max_graph_hops=1
+        )
+
+        fact_texts = {r["fact_text"] for r in results}
+        self.assertEqual(1, len(results))
+        self.assertFalse(any("Carol" in t for t in fact_texts))
+        self.assertTrue(any("Alice" in t and "Bob" in t for t in fact_texts))
 
 
 if __name__ == "__main__":

@@ -657,6 +657,134 @@ class GraphHybridSearchTests(unittest.TestCase):
         self.assertEqual(0, results[0]["chunk_index"])
         self.assertIsNone(results[0].get("fact_id"))
 
+    def _two_hop_db(self):
+        # chunk "src-1"/0 mentions entity A ("entities/eA"). Fact 1 connects
+        # A and shared entity B. Fact 2 connects B and entity C, but fact 2
+        # is NOT directly reachable from A -- only via the shared entity B
+        # found while expanding fact 1's participants. This proves a real
+        # second graph hop, not just hop-exhaustion termination.
+        fact_rows_by_key = {
+            "f1": {
+                "fact_id": "f1",
+                "fact_text": "A relates to B",
+                "confidence": 0.9,
+                "participants": ["a", "b"],
+                "supporting_chunks": [{
+                    "source_id": "src-1", "chunk_index": 1, "text": "fact1 support",
+                    "retrieval_version_id": "rv-1",
+                }],
+            },
+            "f2": {
+                "fact_id": "f2",
+                "fact_text": "B relates to C",
+                "confidence": 0.8,
+                "participants": ["b", "c"],
+                "supporting_chunks": [{
+                    "source_id": "src-1", "chunk_index": 2, "text": "fact2 support",
+                    "retrieval_version_id": "rv-1",
+                }],
+            },
+        }
+
+        def fact_ids_for_entities(bv):
+            # First hop: entity A -> fact 1. Second hop (only reachable once
+            # B has been discovered as a fact-1 participant): entity B ->
+            # fact 2. Use a union so a query for [A, B] (hop 2's expanded
+            # entity set) returns both facts it's connected to, matching how
+            # a real fact_has_participant edge set would behave.
+            entity_ids = set(bv["entity_ids"])
+            found = []
+            if "entities/eA" in entity_ids:
+                found.append("facts/f1")
+            if "entities/eB" in entity_ids:
+                found.append("facts/f2")
+            return found
+
+        def entities_participating(bv):
+            # fact 1 participants are A and B; fact 2 participants are B and C.
+            fact_ids = bv["fact_ids"]
+            if "facts/f1" in fact_ids:
+                return ["entities/eA", "entities/eB"]
+            if "facts/f2" in fact_ids:
+                return ["entities/eB", "entities/eC"]
+            return []
+
+        def facts_lookup(bv):
+            return [fact_rows_by_key[k] for k in bv["fact_keys"] if k in fact_rows_by_key]
+
+        return RoutingAql([
+            (
+                "[doc.source_id, doc.chunk_index] IN @pairs",
+                lambda bv: [{"source_id": "src-1", "chunk_index": 0, "_id": "chunks/seed"}],
+            ),
+            ("FOR edge IN chunk_mentions_entity", ["entities/eA"]),
+            ("edge._to IN @entity_ids", fact_ids_for_entities),
+            ("edge._from IN @fact_ids", entities_participating),
+            ("FOR fact IN facts", facts_lookup),
+        ])
+
+    def test_search_graph_branch_finds_second_hop_fact_when_max_graph_hops_is_2(self):
+        db = FakeDb()
+        db.aql = self._two_hop_db()
+
+        result = vector_store.search_graph_branch(
+            db, "nb-1", "user-1", [{"source_id": "src-1", "chunk_index": 0}], "rv-1", max_graph_hops=2
+        )
+
+        fact_ids = {r["fact_id"] for r in result}
+        self.assertEqual({"f1", "f2"}, fact_ids)
+
+    def test_search_graph_branch_does_not_find_second_hop_fact_when_max_graph_hops_is_1(self):
+        db = FakeDb()
+        db.aql = self._two_hop_db()
+
+        result = vector_store.search_graph_branch(
+            db, "nb-1", "user-1", [{"source_id": "src-1", "chunk_index": 0}], "rv-1", max_graph_hops=1
+        )
+
+        fact_ids = {r["fact_id"] for r in result}
+        self.assertEqual({"f1"}, fact_ids)
+
+    def test_search_graph_branch_returns_one_result_per_supporting_chunk(self):
+        db = FakeDb()
+        db.aql = RoutingAql([
+            (
+                "[doc.source_id, doc.chunk_index] IN @pairs",
+                lambda bv: [{"source_id": "src-1", "chunk_index": 0, "_id": "chunks/seed"}],
+            ),
+            ("FOR edge IN chunk_mentions_entity", ["entities/e1"]),
+            ("edge._to IN @entity_ids", ["facts/f1"]),
+            ("edge._from IN @fact_ids", []),
+            (
+                "FOR fact IN facts",
+                lambda bv: [{
+                    "fact_id": "f1",
+                    "fact_text": "Ada Lovelace wrote the first algorithm",
+                    "confidence": 0.9,
+                    "participants": ["ada lovelace"],
+                    "supporting_chunks": [
+                        {
+                            "source_id": "src-1", "chunk_index": 1, "text": "supporting text 1",
+                            "retrieval_version_id": "rv-1",
+                        },
+                        {
+                            "source_id": "src-1", "chunk_index": 2, "text": "supporting text 2",
+                            "retrieval_version_id": "rv-1",
+                        },
+                    ],
+                }] if bv["fact_keys"] == ["f1"] else [],
+            ),
+        ])
+
+        result = vector_store.search_graph_branch(
+            db, "nb-1", "user-1", [{"source_id": "src-1", "chunk_index": 0}], "rv-1"
+        )
+
+        self.assertEqual(2, len(result))
+        chunk_indices = {r["chunk_index"] for r in result}
+        self.assertEqual({1, 2}, chunk_indices)
+        self.assertTrue(all(r["fact_id"] == "f1" for r in result))
+
     def test_search_graph_branch_is_scoped_by_retrieval_version_on_every_step(self):
         db = FakeDb()
         aql = RoutingAql([
