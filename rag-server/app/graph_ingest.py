@@ -52,7 +52,7 @@ def resolve_and_assemble(
     retrieval_version_id: str | None,
     chunk_extractions: list[dict],
 ) -> dict:
-    chunk_ids = get_chunk_ids_by_index(db, source_id, user_id, retrieval_version_id)
+    chunk_ids = get_chunk_ids_by_index(db, source_id, notebook_id, user_id, retrieval_version_id)
 
     entities: dict[str, dict] = {}
     facts: dict[str, dict] = {}

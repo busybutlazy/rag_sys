@@ -295,12 +295,18 @@ class VectorStoreTests(unittest.TestCase):
         db = FakeDb()
         db.aql = RowAql()
 
-        result = vector_store.get_chunk_ids_by_index(db, "src-1", "user-1", "rv-1")
+        result = vector_store.get_chunk_ids_by_index(db, "src-1", "nb-1", "user-1", "rv-1")
 
         self.assertEqual({0: "chunks/a", 1: "chunks/b"}, result)
         self.assertIn("doc.source_id == @source_id", db.aql.last_query)
+        self.assertIn("doc.notebook_id == @notebook_id", db.aql.last_query)
         self.assertEqual(
-            {"source_id": "src-1", "user_id": "user-1", "retrieval_version_id": "rv-1"},
+            {
+                "source_id": "src-1",
+                "notebook_id": "nb-1",
+                "user_id": "user-1",
+                "retrieval_version_id": "rv-1",
+            },
             db.aql.last_bind_vars,
         )
 

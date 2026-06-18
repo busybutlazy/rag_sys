@@ -337,6 +337,7 @@ def search_hybrid(
 def get_chunk_ids_by_index(
     db,
     source_id: str,
+    notebook_id: str,
     user_id: str,
     retrieval_version_id: str | None = None,
 ) -> dict[int, str]:
@@ -348,6 +349,7 @@ def get_chunk_ids_by_index(
     aql = """
     FOR doc IN chunks
       FILTER doc.source_id == @source_id
+        AND doc.notebook_id == @notebook_id
         AND doc.user_id == @user_id
         AND (@retrieval_version_id == null OR doc.retrieval_version_id == @retrieval_version_id)
       RETURN { chunk_index: doc.chunk_index, _id: doc._id }
@@ -356,6 +358,7 @@ def get_chunk_ids_by_index(
         aql,
         bind_vars={
             "source_id": source_id,
+            "notebook_id": notebook_id,
             "user_id": user_id,
             "retrieval_version_id": retrieval_version_id,
         },
