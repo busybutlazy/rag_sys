@@ -675,7 +675,7 @@ class GraphHybridSearchTests(unittest.TestCase):
             db, "nb-1", "user-1", [{"source_id": "src-1", "chunk_index": 0}], "rv-1"
         )
 
-        for query, bind_vars in aql.calls[:-1]:  # the final facts lookup isn't version-scoped by bind var
+        for query, bind_vars in aql.calls:
             if "retrieval_version_id" in bind_vars:
                 self.assertEqual("rv-1", bind_vars["retrieval_version_id"])
 

@@ -509,9 +509,15 @@ def search_graph_branch(
     aql = """
     FOR fact IN facts
       FILTER fact._key IN @fact_keys
+        AND fact.notebook_id == @notebook_id
+        AND fact.user_id == @user_id
+        AND (@retrieval_version_id == null OR fact.retrieval_version_id == @retrieval_version_id)
       LET participant_names = (
         FOR edge IN fact_has_participant
           FILTER edge._from == fact._id
+            AND edge.notebook_id == @notebook_id
+            AND edge.user_id == @user_id
+            AND (@retrieval_version_id == null OR edge.retrieval_version_id == @retrieval_version_id)
           FOR entity IN entities
             FILTER entity._id == edge._to
             RETURN entity.canonical_name
@@ -519,6 +525,9 @@ def search_graph_branch(
       LET supporting_chunks = (
         FOR edge IN fact_supported_by_chunk
           FILTER edge._from == fact._id
+            AND edge.notebook_id == @notebook_id
+            AND edge.user_id == @user_id
+            AND (@retrieval_version_id == null OR edge.retrieval_version_id == @retrieval_version_id)
           FOR chunk IN chunks
             FILTER chunk._id == edge._to
             RETURN { source_id: chunk.source_id, chunk_index: chunk.chunk_index, text: chunk.text,
@@ -530,7 +539,12 @@ def search_graph_branch(
     fact_keys = [fid.split("/", 1)[1] if "/" in fid else fid for fid in fact_ids]
     cursor = db.aql.execute(
         aql,
-        bind_vars={"fact_keys": fact_keys},
+        bind_vars={
+            "fact_keys": fact_keys,
+            "notebook_id": notebook_id,
+            "user_id": user_id,
+            "retrieval_version_id": retrieval_version_id,
+        },
     )
     fact_rows = list(cursor)
     fact_rows.sort(key=lambda row: row.get("confidence") or 0.0, reverse=True)
