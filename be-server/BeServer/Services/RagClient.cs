@@ -162,13 +162,17 @@ public record RagChunkResult(
     [property: JsonPropertyName("source_id")] string SourceId,
     [property: JsonPropertyName("chunk_index")] int ChunkIndex,
     [property: JsonPropertyName("retrieval_version_id")] string? RetrievalVersionId,
-    string Text);
+    string Text,
+    [property: JsonPropertyName("fact_id")] string? FactId = null,
+    [property: JsonPropertyName("fact_text")] string? FactText = null,
+    List<string>? Participants = null);
 public record RagSearchResponse(List<RagChunkResult> Results);
 public record RagBenchmarkResponse(
     string Query,
     List<RagChunkResult> Vector,
     List<RagChunkResult> Bm25,
-    List<RagChunkResult> Hybrid);
+    List<RagChunkResult> Hybrid,
+    [property: JsonPropertyName("graph_hybrid")] List<RagChunkResult>? GraphHybrid = null);
 public record RagExperimentResultItem(
     [property: JsonPropertyName("source_id")] string SourceId,
     [property: JsonPropertyName("chunk_index")] int ChunkIndex);

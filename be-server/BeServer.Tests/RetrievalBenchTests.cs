@@ -98,6 +98,95 @@ public class RetrievalBenchTests
         Assert.NotNull(created.Value);
     }
 
+    [Fact]
+    public async Task Compare_WithGraphHybridMode_ReturnsGraphMetrics()
+    {
+        await using var db = CreateDb();
+        var user = await SeedUser(db);
+        var (notebook, a, b) = await SeedGraphTestVersions(db, user.Id);
+        var controller = CreateController(db, user.Id);
+
+        var result = Assert.IsType<OkObjectResult>(await controller.Compare(
+            notebook.Id,
+            new RetrievalCompareRequest("hello", a.Id, b.Id, ["graph_hybrid"])));
+        var json = JsonSerializer.Serialize(result.Value);
+        using var doc = JsonDocument.Parse(json);
+        var metrics = doc.RootElement.GetProperty("Comparisons")[0].GetProperty("Metrics");
+
+        // Version A's fake response has no fact_id; version B's has one
+        // result backed by a fact out of two total.
+        Assert.Equal(0.0, metrics.GetProperty("GraphHitRateA").GetDouble());
+        Assert.Equal(0.5, metrics.GetProperty("GraphHitRateB").GetDouble());
+        Assert.Equal(0, metrics.GetProperty("FactCoverageA").GetInt32());
+        Assert.Equal(1, metrics.GetProperty("FactCoverageB").GetInt32());
+    }
+
+    [Fact]
+    public async Task Compare_WithNonGraphMode_ReportsZeroGraphMetrics()
+    {
+        await using var db = CreateDb();
+        var user = await SeedUser(db);
+        var (notebook, a, b) = await SeedGraphTestVersions(db, user.Id);
+        var controller = CreateController(db, user.Id);
+
+        var result = Assert.IsType<OkObjectResult>(await controller.Compare(
+            notebook.Id,
+            new RetrievalCompareRequest("hello", a.Id, b.Id, ["hybrid"])));
+        var json = JsonSerializer.Serialize(result.Value);
+        using var doc = JsonDocument.Parse(json);
+        var metrics = doc.RootElement.GetProperty("Comparisons")[0].GetProperty("Metrics");
+
+        Assert.Equal(0.0, metrics.GetProperty("GraphHitRateA").GetDouble());
+        Assert.Equal(0.0, metrics.GetProperty("GraphHitRateB").GetDouble());
+        Assert.Equal(0, metrics.GetProperty("FactCoverageA").GetInt32());
+        Assert.Equal(0, metrics.GetProperty("FactCoverageB").GetInt32());
+    }
+
+    [Fact]
+    public async Task RunDataset_WithGraphHybridMode_PersistsFactProvenanceAndReopensIdentically()
+    {
+        await using var db = CreateDb();
+        var user = await SeedUser(db);
+        var (notebook, a, b) = await SeedGraphTestVersions(db, user.Id);
+        var dataset = new EvaluationDataset { NotebookId = notebook.Id, UserId = user.Id, Name = "Core" };
+        db.EvaluationDatasets.Add(dataset);
+        db.EvaluationQueries.Add(new EvaluationQuery { DatasetId = dataset.Id, QueryText = "q1", SortOrder = 0 });
+        await db.SaveChangesAsync();
+        var controller = CreateController(db, user.Id);
+
+        var created = Assert.IsType<CreatedAtActionResult>(await controller.RunDataset(
+            notebook.Id, new EvaluationRunRequest(dataset.Id, a.Id, b.Id, ["graph_hybrid"])));
+        var createdMetrics = JsonSerializer.Serialize(created.Value);
+        var runId = await db.EvaluationRuns.Select(r => r.Id).SingleAsync();
+
+        var reopened = Assert.IsType<OkObjectResult>(await controller.GetRun(runId));
+        var reopenedJson = JsonSerializer.Serialize(reopened.Value);
+        using var doc = JsonDocument.Parse(reopenedJson);
+        var metrics = doc.RootElement.GetProperty("Comparisons")[0].GetProperty("Metrics");
+
+        Assert.Contains("f1", createdMetrics, StringComparison.Ordinal);
+        Assert.Equal(0.5, metrics.GetProperty("GraphHitRateB").GetDouble());
+        Assert.Equal(1, metrics.GetProperty("FactCoverageB").GetInt32());
+        var versionBResults = doc.RootElement.GetProperty("Comparisons")[0].GetProperty("VersionB").GetProperty("Results");
+        Assert.Equal("f1", versionBResults[0].GetProperty("FactId").GetString());
+        Assert.Equal("Beta supports Gamma", versionBResults[0].GetProperty("FactText").GetString());
+    }
+
+    private static async Task<(Notebook, NotebookRetrievalVersion, NotebookRetrievalVersion)> SeedGraphTestVersions(AppDbContext db, string userId)
+    {
+        // Explicit, deterministic ids -- FakeRagHandler keys its canned graph_hybrid
+        // payload off "version-graph-b" specifically, unlike the generic
+        // SeedNotebookWithVersions helper whose random-guid ids only happen to
+        // satisfy the (content-insensitive) older tests.
+        var notebook = new Notebook { UserId = userId, Name = "NB-graph" };
+        db.Notebooks.Add(notebook);
+        var a = new NotebookRetrievalVersion { Id = "version-graph-a", NotebookId = notebook.Id, CreatedByUserId = userId, ChunkSize = 800, ChunkOverlap = 100, EmbeddingModel = "m", EmbeddingDimensions = 3 };
+        var b = new NotebookRetrievalVersion { Id = "version-graph-b", NotebookId = notebook.Id, CreatedByUserId = userId, ChunkSize = 900, ChunkOverlap = 100, EmbeddingModel = "m", EmbeddingDimensions = 3 };
+        db.NotebookRetrievalVersions.AddRange(a, b);
+        await db.SaveChangesAsync();
+        return (notebook, a, b);
+    }
+
     private static AppDbContext CreateDb() =>
         new(new DbContextOptionsBuilder<AppDbContext>().UseInMemoryDatabase(Guid.NewGuid().ToString()).Options);
 
@@ -153,13 +242,18 @@ public class RetrievalBenchTests
     {
         protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
         {
+            var path = request.RequestUri?.AbsolutePath ?? "";
             var query = request.RequestUri?.Query ?? "";
             var version = query.Contains("retrieval_version_id=")
                 ? query.Split("retrieval_version_id=")[1].Split('&')[0]
                 : "none";
-            var payload = version.EndsWith("1")
+            var isGraphHybrid = path.EndsWith("/search/graph_hybrid");
+            var isVersionB = version is "version-graph-b" || (version != "version-graph-a" && !version.EndsWith("1"));
+            var payload = !isVersionB
                 ? "{\"results\":[{\"source_id\":\"s1\",\"chunk_index\":0,\"retrieval_version_id\":\"a\",\"text\":\"alpha\"}]}"
-                : "{\"results\":[{\"source_id\":\"s1\",\"chunk_index\":0,\"retrieval_version_id\":\"b\",\"text\":\"beta\"},{\"source_id\":\"s2\",\"chunk_index\":1,\"retrieval_version_id\":\"b\",\"text\":\"gamma\"}]}";
+                : (isGraphHybrid
+                    ? "{\"results\":[{\"source_id\":\"s1\",\"chunk_index\":0,\"retrieval_version_id\":\"b\",\"text\":\"beta\",\"fact_id\":\"f1\",\"fact_text\":\"Beta supports Gamma\",\"participants\":[\"beta\",\"gamma\"]},{\"source_id\":\"s2\",\"chunk_index\":1,\"retrieval_version_id\":\"b\",\"text\":\"gamma\"}]}"
+                    : "{\"results\":[{\"source_id\":\"s1\",\"chunk_index\":0,\"retrieval_version_id\":\"b\",\"text\":\"beta\"},{\"source_id\":\"s2\",\"chunk_index\":1,\"retrieval_version_id\":\"b\",\"text\":\"gamma\"}]}");
             return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
             {
                 Content = new StringContent(payload),

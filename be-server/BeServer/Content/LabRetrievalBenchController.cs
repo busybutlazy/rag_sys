@@ -19,7 +19,7 @@ public class LabRetrievalBenchController(
     RagClient rag,
     RetrievalComparisonService comparison) : ControllerBase
 {
-    private static readonly string[] ValidModes = ["vector", "bm25", "hybrid"];
+    private static readonly string[] ValidModes = ["vector", "bm25", "hybrid", "graph_hybrid"];
     private string UserId => currentUser.UserId;
 
     [HttpPost("notebooks/{notebookId}/retrieval-bench/compare")]
@@ -152,8 +152,8 @@ public class LabRetrievalBenchController(
             return ApiErrors.NotFound(this, "notebook.not_found", "Notebook not found");
         if (topK < 1 || topK > 20)
             return ApiErrors.BadRequest(this, "retrieval_bench.invalid_top_k", "top_k must be between 1 and 20.");
-        if (modes.Length == 0 || modes.Length > 3 || modes.Any(m => !ValidModes.Contains(m)))
-            return ApiErrors.BadRequest(this, "retrieval_bench.invalid_modes", "Modes must be vector, bm25, or hybrid.");
+        if (modes.Length == 0 || modes.Length > ValidModes.Length || modes.Any(m => !ValidModes.Contains(m)))
+            return ApiErrors.BadRequest(this, "retrieval_bench.invalid_modes", "Modes must be vector, bm25, hybrid, or graph_hybrid.");
         var versionIds = await db.NotebookRetrievalVersions
             .Where(v => v.NotebookId == notebookId && (v.Id == retrievalVersionAId || v.Id == retrievalVersionBId))
             .Select(v => v.Id)
@@ -248,7 +248,7 @@ public class LabRetrievalBenchController(
         JsonSerializer.Deserialize<List<RetrievalResultSnapshot>>(json) ?? [];
 
     private static RagChunkResult ToChunk(RetrievalResultSnapshot s) =>
-        new(s.SourceId, s.ChunkIndex, s.RetrievalVersionId, s.TextPreview);
+        new(s.SourceId, s.ChunkIndex, s.RetrievalVersionId, s.TextPreview, s.FactId, s.FactText, s.Participants);
 
     private static object ToStoredResultDto(EvaluationResult r) => new
     {

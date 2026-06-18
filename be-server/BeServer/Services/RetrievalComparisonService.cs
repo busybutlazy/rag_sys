@@ -24,7 +24,11 @@ public class RetrievalComparisonService
             sourceOverlap,
             rankDeltas,
             right.Count - left.Count,
-            rightLatencyMs - leftLatencyMs);
+            rightLatencyMs - leftLatencyMs,
+            GraphHitRate(left),
+            GraphHitRate(right),
+            FactCoverage(left),
+            FactCoverage(right));
     }
 
     public string Snapshot(IReadOnlyList<RagChunkResult> results)
@@ -34,11 +38,25 @@ public class RetrievalComparisonService
             r.SourceId,
             r.ChunkIndex,
             r.RetrievalVersionId,
-            r.Text.Length <= 240 ? r.Text : r.Text[..240]));
+            r.Text.Length <= 240 ? r.Text : r.Text[..240],
+            r.FactId,
+            r.FactText,
+            r.Participants));
         return JsonSerializer.Serialize(payload);
     }
 
     private static RetrievalChunkKey Key(RagChunkResult r) => new(r.SourceId, r.ChunkIndex);
+
+    // Fraction of a side's results that were sourced from the graph branch
+    // (carry a fact_id) rather than vector/BM25 alone. Always 0 for modes
+    // other than graph_hybrid, since only that mode's results ever set
+    // fact_id -- no mode-name check needed here.
+    private static double GraphHitRate(IReadOnlyList<RagChunkResult> results) =>
+        results.Count == 0 ? 0.0 : results.Count(r => r.FactId is not null) / (double)results.Count;
+
+    // Count of distinct facts backing a side's results.
+    private static int FactCoverage(IReadOnlyList<RagChunkResult> results) =>
+        results.Where(r => r.FactId is not null).Select(r => r.FactId).Distinct().Count();
 }
 
 public readonly record struct RetrievalChunkKey(string SourceId, int ChunkIndex);
@@ -48,10 +66,17 @@ public record RetrievalComparisonSummary(
     int SourceOverlap,
     List<RetrievalRankDelta> RankDeltas,
     int ResultCountDelta,
-    int LatencyDeltaMs);
+    int LatencyDeltaMs,
+    double GraphHitRateA,
+    double GraphHitRateB,
+    int FactCoverageA,
+    int FactCoverageB);
 public record RetrievalResultSnapshot(
     int Rank,
     string SourceId,
     int ChunkIndex,
     string? RetrievalVersionId,
-    string TextPreview);
+    string TextPreview,
+    string? FactId = null,
+    string? FactText = null,
+    List<string>? Participants = null);

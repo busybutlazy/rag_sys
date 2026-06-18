@@ -6,16 +6,28 @@ type Version = { id: string; notes?: string; chunkSize: number; chunkOverlap: nu
 type Dataset = { id: string; name: string; description?: string }
 type Query = { id: string; queryText: string; sortOrder: number }
 type DatasetDetail = Dataset & { queries: Query[] }
-type Chunk = { sourceId: string; chunkIndex: number; text: string }
+type Chunk = { sourceId: string; chunkIndex: number; text: string; factId?: string; factText?: string; participants?: string[] }
+type Metrics = {
+  overlapAtK: number
+  sourceOverlap: number
+  resultCountDelta: number
+  latencyDeltaMs: number
+  graphHitRateA: number
+  graphHitRateB: number
+  factCoverageA: number
+  factCoverageB: number
+}
 type Comparison = {
   mode: string
   versionA: { latencyMs: number; results: Chunk[] }
   versionB: { latencyMs: number; results: Chunk[] }
-  metrics: { overlapAtK: number; sourceOverlap: number; resultCountDelta: number; latencyDeltaMs: number }
+  metrics: Metrics
 }
 type CompareResponse = { query: string; comparisons: Comparison[] }
 type RunSummary = { id: string; datasetId?: string; status: string; createdAt: string }
-type RunDetail = { comparisons: Array<{ queryTextSnapshot: string; mode: string; metrics: Comparison['metrics'] }> }
+type RunDetail = { comparisons: Array<{ queryTextSnapshot: string; mode: string; metrics: Metrics }> }
+
+const ALL_MODES = ['vector', 'bm25', 'hybrid', 'graph_hybrid']
 
 export default function LabRetrievalBenchPage() {
   const [notebooks, setNotebooks] = useState<Notebook[]>([])
@@ -29,6 +41,7 @@ export default function LabRetrievalBenchPage() {
   const [datasetName, setDatasetName] = useState('')
   const [newQuery, setNewQuery] = useState('')
   const [query, setQuery] = useState('')
+  const [modes, setModes] = useState<string[]>(['hybrid'])
   const [comparison, setComparison] = useState<CompareResponse | null>(null)
   const [runs, setRuns] = useState<RunSummary[]>([])
   const [runDetail, setRunDetail] = useState<RunDetail | null>(null)
@@ -77,15 +90,19 @@ export default function LabRetrievalBenchPage() {
     apiGet<DatasetDetail>(`/api/lab/evaluation-datasets/${datasetId}`).then(setDatasetDetail)
   }, [datasetId])
 
+  function toggleMode(mode: string) {
+    setModes(prev => prev.includes(mode) ? prev.filter(m => m !== mode) : [...prev, mode])
+  }
+
   async function compare() {
-    if (!query.trim() || !versionA || !versionB) return
+    if (!query.trim() || !versionA || !versionB || modes.length === 0) return
     setBusy(true); setError('')
     try {
       setComparison(await apiPost<CompareResponse>(`/api/lab/notebooks/${notebookId}/retrieval-bench/compare`, {
         query,
         retrievalVersionAId: versionA,
         retrievalVersionBId: versionB,
-        modes: ['hybrid'],
+        modes,
         topK: 5,
         alpha: 0.5,
       }))
@@ -108,14 +125,14 @@ export default function LabRetrievalBenchPage() {
   }
 
   async function runDataset() {
-    if (!datasetId || !versionA || !versionB) return
+    if (!datasetId || !versionA || !versionB || modes.length === 0) return
     setBusy(true); setError('')
     try {
       await apiPost(`/api/lab/notebooks/${notebookId}/retrieval-bench/runs`, {
         datasetId,
         retrievalVersionAId: versionA,
         retrievalVersionBId: versionB,
-        modes: ['hybrid'],
+        modes,
         topK: 5,
         alpha: 0.5,
       })
@@ -124,7 +141,6 @@ export default function LabRetrievalBenchPage() {
     finally { setBusy(false) }
   }
 
-  const activeComparison = comparison?.comparisons[0]
   const versionLabel = (v: Version) =>
     `${v.active ? 'Active · ' : ''}${v.id.slice(0, 8)} · ${v.chunkSize}/${v.chunkOverlap} · ${v.embeddingModel}${v.notes ? ` · ${v.notes}` : ''}`
 
@@ -142,6 +158,15 @@ export default function LabRetrievalBenchPage() {
           <label><span className="field-label">Version A</span><select className="ui-input" value={versionA} onChange={e => setVersionA(e.target.value)}>{versions.length === 0 && <option value="">No versions available</option>}{versions.map(v => <option key={v.id} value={v.id}>{versionLabel(v)}</option>)}</select></label>
           <label><span className="field-label">Version B</span><select className="ui-input" value={versionB} onChange={e => setVersionB(e.target.value)}>{versions.length === 0 && <option value="">No versions available</option>}{versions.map(v => <option key={v.id} value={v.id}>{versionLabel(v)}</option>)}</select></label>
         </div>
+        <div className="lab-toolbar" style={{ marginTop: '0.75rem' }}>
+          <span className="field-label">Modes</span>
+          {ALL_MODES.map(mode => (
+            <label key={mode} className="lab-stat" style={{ cursor: 'pointer' }}>
+              <input type="checkbox" checked={modes.includes(mode)} onChange={() => toggleMode(mode)} style={{ marginRight: '0.35rem' }} />
+              {mode}
+            </label>
+          ))}
+        </div>
         {loadingMessage && <p className="muted" style={{ marginTop: '0.75rem' }}>{loadingMessage}</p>}
       </section>
 
@@ -156,25 +181,43 @@ export default function LabRetrievalBenchPage() {
           <input className="ui-input" value={query} onChange={e => setQuery(e.target.value)} placeholder="Ask one benchmark query" />
           <button className="ui-button" onClick={compare} disabled={busy}>Compare</button>
         </div>
-        {activeComparison && (
-          <>
+        {comparison && comparison.comparisons.map(c => (
+          <div key={c.mode} style={{ marginTop: '1rem' }}>
+            <strong>{c.mode}</strong>
             <div className="lab-stat-strip">
-              <span className="lab-stat">overlap@k {activeComparison.metrics.overlapAtK}</span>
-              <span className="lab-stat">source overlap {activeComparison.metrics.sourceOverlap}</span>
-              <span className="lab-stat">latency Δ {activeComparison.metrics.latencyDeltaMs} ms</span>
+              <span className="lab-stat">overlap@k {c.metrics.overlapAtK}</span>
+              <span className="lab-stat">source overlap {c.metrics.sourceOverlap}</span>
+              <span className="lab-stat">latency Δ {c.metrics.latencyDeltaMs} ms</span>
+              {c.mode === 'graph_hybrid' && (
+                <>
+                  <span className="lab-stat">graph hit rate A {(c.metrics.graphHitRateA * 100).toFixed(0)}%</span>
+                  <span className="lab-stat">graph hit rate B {(c.metrics.graphHitRateB * 100).toFixed(0)}%</span>
+                  <span className="lab-stat">fact coverage A {c.metrics.factCoverageA}</span>
+                  <span className="lab-stat">fact coverage B {c.metrics.factCoverageB}</span>
+                </>
+              )}
             </div>
             <div className="lab-result-columns">
-              {[activeComparison.versionA, activeComparison.versionB].map((side, idx) => (
+              {[c.versionA, c.versionB].map((side, idx) => (
                 <div key={idx} className="lab-subpanel">
                   <strong>{idx === 0 ? 'Version A' : 'Version B'} · {side.latencyMs} ms</strong>
                   <div className="lab-card-list" style={{ marginTop: '0.75rem' }}>
-                    {side.results.map((r, i) => <div key={`${r.sourceId}-${r.chunkIndex}`} className="lab-card"><span>{i + 1}. {r.sourceId}:{r.chunkIndex}</span></div>)}
+                    {side.results.map((r, i) => (
+                      <div key={`${r.sourceId}-${r.chunkIndex}`} className="lab-card">
+                        <span>{i + 1}. {r.sourceId}:{r.chunkIndex}</span>
+                        {r.factId && (
+                          <span className="muted" title={r.participants?.join(', ')}>
+                            {' '}· fact: {r.factText}{r.participants && r.participants.length > 0 ? ` (${r.participants.join(', ')})` : ''}
+                          </span>
+                        )}
+                      </div>
+                    ))}
                   </div>
                 </div>
               ))}
             </div>
-          </>
-        )}
+          </div>
+        ))}
       </section>
 
       <section className="workspace-panel">
@@ -231,7 +274,12 @@ export default function LabRetrievalBenchPage() {
             {runDetail.comparisons.map((c, i) => (
               <div key={`${c.queryTextSnapshot}-${i}`} className="lab-card">
                 <span>{c.queryTextSnapshot} · {c.mode}</span>
-                <span className="muted">overlap@k {c.metrics.overlapAtK} · latency Δ {c.metrics.latencyDeltaMs} ms</span>
+                <span className="muted">
+                  overlap@k {c.metrics.overlapAtK} · latency Δ {c.metrics.latencyDeltaMs} ms
+                  {c.mode === 'graph_hybrid' && (
+                    <> · fact coverage A/B {c.metrics.factCoverageA}/{c.metrics.factCoverageB}</>
+                  )}
+                </span>
               </div>
             ))}
           </div>

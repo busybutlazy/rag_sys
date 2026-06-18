@@ -175,13 +175,13 @@ Implementation note: a graph-data-only `_seed_graph_payload` helper in `tests/te
 
 ### Gate D — Lab retrieval-bench integration
 
-- [ ] Add `graph_hybrid` to the mode picker in `LabRetrievalBenchPage.tsx` ad hoc compare and dataset runner.
-- [ ] Extend BE's `RetrievalComparisonService` to compute `graph_hit_rate` and `fact_coverage` when either compared side used `graph_hybrid`.
-- [ ] Surface fact provenance in the side-by-side diff (which facts/entities backed a given result), reusing the existing diff layout rather than adding a new page.
+- [x] Add `graph_hybrid` to the mode picker in `LabRetrievalBenchPage.tsx` ad hoc compare and dataset runner. The page previously had no mode picker at all (modes were hardcoded to `['hybrid']`); added a shared checkbox picker (`ALL_MODES`) feeding both the ad hoc compare and dataset-run requests.
+- [x] Extend BE's `RetrievalComparisonService` to compute `graph_hit_rate` and `fact_coverage` when either compared side used `graph_hybrid`. Added `GraphHitRateA/B` and `FactCoverageA/B` to `RetrievalComparisonSummary`, computed per-side directly from `RagChunkResult.FactId` (naturally 0 for non-graph modes, no mode-name branching needed).
+- [x] Surface fact provenance in the side-by-side diff (which facts/entities backed a given result), reusing the existing diff layout rather than adding a new page. Each result row now shows the backing fact text + participants inline when present; no new page added.
 
 **Acceptance**
-- [ ] The owner can compare a `hybrid` version against a `graph_hybrid`-enabled version on the same dataset and see overlap/rank-delta metrics plus the two new graph metrics.
-- [ ] A dataset run involving `graph_hybrid` persists and reopens identically to existing runs (no special-cased history view).
+- [x] The owner can compare a `hybrid` version against a `graph_hybrid`-enabled version on the same dataset and see overlap/rank-delta metrics plus the two new graph metrics. The "same dataset, different mode per side" framing from the original checklist text turned out to need one correction during implementation: modes apply uniformly to both compared versions (existing architecture), so the real comparison is "version A (graph disabled) vs version B (graph enabled), both queried with `search_mode=graph_hybrid`" -- version A's graph branch is a no-op per Gate C's behavior, version B's isn't. Verified via `Compare_WithGraphHybridMode_ReturnsGraphMetrics`.
+- [x] A dataset run involving `graph_hybrid` persists and reopens identically to existing runs (no special-cased history view). `RetrievalResultSnapshot` extended with `FactId`/`FactText`/`Participants` so persistence round-trips losslessly; verified by `RunDataset_WithGraphHybridMode_PersistsFactProvenanceAndReopensIdentically`, which asserts the reopened run's metrics and fact fields match the freshly-created run's.
 
 ### Gate E — Phase completion hygiene
 
