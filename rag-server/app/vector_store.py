@@ -219,6 +219,10 @@ def delete_user_payload(db, user_id: str) -> None:
             f"FOR doc IN {collection} FILTER doc.user_id == @uid REMOVE doc IN {collection}",
             bind_vars={"uid": user_id},
         )
+    # Graph data (Phase 19) must be wiped alongside everything else on
+    # account deletion -- otherwise entities/facts/edges outlive the user
+    # who owns them (Gate B review fix).
+    delete_all_user_graph_payload(db, user_id)
 
 
 def search_vector(
@@ -359,15 +363,72 @@ def get_chunk_ids_by_index(
     return {row["chunk_index"]: row["_id"] for row in cursor}
 
 
-def delete_graph_payload(db, notebook_id: str, user_id: str, retrieval_version_id: str) -> None:
-    """Delete entities/facts/edges for a retrieval version, mirroring
-    delete_version_chunks so graph data is retired exactly when a version's
-    chunks are."""
-    for collection in ("entities", "facts", "chunk_mentions_entity", "fact_has_participant", "fact_supported_by_chunk"):
+_GRAPH_PAYLOAD_COLLECTIONS = (
+    "entities",
+    "facts",
+    "chunk_mentions_entity",
+    "fact_has_participant",
+    "fact_supported_by_chunk",
+)
+
+
+def delete_graph_payload(db, notebook_id: str, user_id: str, retrieval_version_id: str | None) -> None:
+    """Delete entities/facts/edges for a notebook, mirroring delete_version_chunks
+    so graph data is retired exactly when its chunks are.
+
+    retrieval_version_id=None means "every version" -- use this for full
+    notebook wipes; pass an explicit version id to scope the delete to just
+    that version (e.g. the chunk-prune path)."""
+    for collection in _GRAPH_PAYLOAD_COLLECTIONS:
         db.aql.execute(
             f"FOR doc IN {collection} FILTER doc.notebook_id == @nid AND doc.user_id == @uid "
-            f"AND doc.retrieval_version_id == @rv REMOVE doc IN {collection}",
+            f"AND (@rv == null OR doc.retrieval_version_id == @rv) REMOVE doc IN {collection}",
             bind_vars={"nid": notebook_id, "uid": user_id, "rv": retrieval_version_id},
+        )
+
+
+def delete_source_graph_payload(db, source_id: str, user_id: str) -> None:
+    """Delete entity-mention/fact-support edges tied to a single source's
+    chunks, across all retrieval versions, mirroring delete_all_source_chunks.
+
+    Must be called BEFORE the source's chunks are removed (e.g. before
+    delete_all_source_chunks) since it looks the chunks up by source_id to
+    find the chunk _ids referenced by graph edges. Entities/facts themselves
+    aren't keyed by source_id (they can be supported by chunks from multiple
+    sources within a version), so this only prunes the edges anchored to this
+    source's chunks; it leaves entities/facts in place even if this was their
+    only supporting edge, consistent with the version-scoped delete_graph_payload
+    which also only removes edges/vertices it owns directly.
+    """
+    db.aql.execute(
+        "LET chunk_ids = (FOR c IN chunks FILTER c.source_id == @sid AND c.user_id == @uid RETURN c._id) "
+        "FOR edge IN chunk_mentions_entity FILTER edge._from IN chunk_ids REMOVE edge IN chunk_mentions_entity",
+        bind_vars={"sid": source_id, "uid": user_id},
+    )
+    db.aql.execute(
+        "LET chunk_ids = (FOR c IN chunks FILTER c.source_id == @sid AND c.user_id == @uid RETURN c._id) "
+        "FOR edge IN fact_supported_by_chunk FILTER edge._to IN chunk_ids REMOVE edge IN fact_supported_by_chunk",
+        bind_vars={"sid": source_id, "uid": user_id},
+    )
+
+
+def delete_all_notebook_graph_payload(db, notebook_id: str, user_id: str) -> None:
+    """Delete entities/facts/edges for every retrieval version of a notebook.
+
+    Use this for full notebook wipes (delete_notebook_payload's graph
+    counterpart); for a single version use delete_graph_payload instead.
+    """
+    delete_graph_payload(db, notebook_id, user_id, None)
+
+
+def delete_all_user_graph_payload(db, user_id: str) -> None:
+    """Delete every entity/fact/edge owned by a user, across all notebooks
+    and retrieval versions. Use this for account deletion (delete_user_payload's
+    graph counterpart)."""
+    for collection in _GRAPH_PAYLOAD_COLLECTIONS:
+        db.aql.execute(
+            f"FOR doc IN {collection} FILTER doc.user_id == @uid REMOVE doc IN {collection}",
+            bind_vars={"uid": user_id},
         )
 
 

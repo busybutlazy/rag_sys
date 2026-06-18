@@ -315,6 +315,124 @@ class VectorStoreTests(unittest.TestCase):
         self.assertIn("doc.retrieval_version_id == @rv", db.aql.last_query)
         self.assertEqual({"nid": "nb-1", "uid": "user-1", "rv": "rv-1"}, db.aql.last_bind_vars)
 
+    def test_delete_graph_payload_with_no_version_means_all_versions(self):
+        class RecordingAql(FakeAql):
+            def __init__(self):
+                super().__init__()
+                self.queries = []
+
+            def execute(self, query, bind_vars):
+                super().execute(query, bind_vars)
+                self.queries.append((query, bind_vars))
+                return []
+
+        db = FakeDb()
+        db.aql = RecordingAql()
+
+        vector_store.delete_graph_payload(db, "nb-1", "user-1", None)
+
+        self.assertEqual(5, len(db.aql.queries))
+        for query, bind_vars in db.aql.queries:
+            self.assertIn("@rv == null OR doc.retrieval_version_id == @rv", query)
+            self.assertEqual({"nid": "nb-1", "uid": "user-1", "rv": None}, bind_vars)
+
+    def test_delete_all_notebook_graph_payload_delegates_with_no_version_scope(self):
+        class RecordingAql(FakeAql):
+            def __init__(self):
+                super().__init__()
+                self.queries = []
+
+            def execute(self, query, bind_vars):
+                super().execute(query, bind_vars)
+                self.queries.append((query, bind_vars))
+                return []
+
+        db = FakeDb()
+        db.aql = RecordingAql()
+
+        vector_store.delete_all_notebook_graph_payload(db, "nb-1", "user-1")
+
+        self.assertEqual(5, len(db.aql.queries))
+        for _, bind_vars in db.aql.queries:
+            self.assertIsNone(bind_vars["rv"])
+
+    def test_delete_all_user_graph_payload_scopes_every_graph_collection_by_user(self):
+        class RecordingAql(FakeAql):
+            def __init__(self):
+                super().__init__()
+                self.queries = []
+
+            def execute(self, query, bind_vars):
+                super().execute(query, bind_vars)
+                self.queries.append((query, bind_vars))
+                return []
+
+        db = FakeDb()
+        db.aql = RecordingAql()
+
+        vector_store.delete_all_user_graph_payload(db, "user-1")
+
+        self.assertEqual(5, len(db.aql.queries))
+        for query, bind_vars in db.aql.queries:
+            self.assertIn("doc.user_id == @uid", query)
+            self.assertEqual({"uid": "user-1"}, bind_vars)
+
+    def test_delete_user_payload_also_clears_graph_data(self):
+        class RecordingAql(FakeAql):
+            def __init__(self):
+                super().__init__()
+                self.queries = []
+
+            def execute(self, query, bind_vars):
+                super().execute(query, bind_vars)
+                self.queries.append((query, bind_vars))
+                return []
+
+        db = FakeDb()
+        db.aql = RecordingAql()
+
+        vector_store.delete_user_payload(db, "user-1")
+
+        all_queries = "\n".join(q for q, _ in db.aql.queries)
+        for collection in (
+            "chunks",
+            "documents",
+            "experiments",
+            "entities",
+            "facts",
+            "chunk_mentions_entity",
+            "fact_has_participant",
+            "fact_supported_by_chunk",
+        ):
+            self.assertIn(collection, all_queries)
+
+    def test_delete_source_graph_payload_filters_edges_by_chunk_source_and_user(self):
+        class RecordingAql(FakeAql):
+            def __init__(self):
+                super().__init__()
+                self.queries = []
+
+            def execute(self, query, bind_vars):
+                super().execute(query, bind_vars)
+                self.queries.append((query, bind_vars))
+                return []
+
+        db = FakeDb()
+        db.aql = RecordingAql()
+
+        vector_store.delete_source_graph_payload(db, "src-1", "user-1")
+
+        self.assertEqual(2, len(db.aql.queries))
+        mentions_query, mentions_vars = db.aql.queries[0]
+        self.assertIn("chunk_mentions_entity", mentions_query)
+        self.assertIn("c.source_id == @sid", mentions_query)
+        self.assertEqual({"sid": "src-1", "uid": "user-1"}, mentions_vars)
+
+        facts_query, facts_vars = db.aql.queries[1]
+        self.assertIn("fact_supported_by_chunk", facts_query)
+        self.assertIn("c.source_id == @sid", facts_query)
+        self.assertEqual({"sid": "src-1", "uid": "user-1"}, facts_vars)
+
 
 if __name__ == "__main__":
     unittest.main()

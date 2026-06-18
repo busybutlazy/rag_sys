@@ -252,6 +252,9 @@ async def delete_document(
 ):
     _check_secret(x_internal_secret)
     db = get_db()
+    # Graph edges reference chunk _ids, so prune them before the chunks
+    # themselves are removed (Phase 19 Gate B review fix).
+    vector_store.delete_source_graph_payload(db, source_id, user_id)
     vector_store.delete_all_source_chunks(db, source_id, user_id)
     docs_col = db.collection("documents")
     doc = docs_col.get(source_id)
@@ -277,7 +280,11 @@ async def delete_notebook_documents(
     x_internal_secret: str | None = Header(default=None),
 ):
     _check_secret(x_internal_secret)
-    vector_store.delete_notebook_payload(get_db(), notebook_id, user_id)
+    db = get_db()
+    vector_store.delete_notebook_payload(db, notebook_id, user_id)
+    # Notebook delete must clear graph data for every retrieval version, not
+    # just one (Phase 19 Gate B review fix).
+    vector_store.delete_all_notebook_graph_payload(db, notebook_id, user_id)
 
 
 @app.delete("/notebooks/{notebook_id}/chunks", status_code=204)
