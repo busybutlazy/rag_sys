@@ -96,8 +96,14 @@ builder.Services.AddHttpClient<RagClient>(client =>
 builder.Services.AddHostedService<IngestionJobWorker>();
 builder.Services.AddHostedService<ReindexJobWorker>();
 builder.Services.AddHttpClient("ai-server", client =>
+{
     client.BaseAddress = new Uri(
-        builder.Configuration["AI_SERVER_URL"] ?? "http://ai-server:8002"));
+        builder.Configuration["AI_SERVER_URL"] ?? "http://ai-server:8002");
+    // Graph extraction can make sequential LLM calls per chunk batch; give it
+    // headroom beyond the default 100s so a slow-but-healthy AI server isn't
+    // killed mid-extraction (Gate B review fix).
+    client.Timeout = TimeSpan.FromSeconds(120);
+});
 
 builder.Services.AddCors(options =>
     options.AddPolicy("frontend", policy =>

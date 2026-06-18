@@ -297,6 +297,54 @@ public class IngestionJobTests
         Assert.Equal(SourceStatuses.Ingested, source.Status);
     }
 
+    [Fact]
+    public async Task Worker_TruncatesChunksSentForGraphExtraction_WhenSourceHasManyChunks()
+    {
+        const int totalChunks = GraphExtractionService.MaxChunksPerGraphExtraction + 25;
+        var capturedExtractChunkCount = -1;
+
+        var handler = new FakeHandler(req =>
+        {
+            var path = req.RequestUri!.AbsolutePath;
+            if (path.EndsWith("/content"))
+            {
+                var chunks = Enumerable.Range(0, totalChunks)
+                    .Select(i => new { source_id = "s", chunk_index = i, text = $"chunk {i}" });
+                return JsonResponse(new
+                {
+                    source_id = "s",
+                    notebook_id = "n",
+                    chunks,
+                    text = "many chunks",
+                    truncated = false,
+                });
+            }
+            if (path == "/ai/extract/graph")
+            {
+                var body = req.Content!.ReadAsStringAsync().Result;
+                using var doc = System.Text.Json.JsonDocument.Parse(body);
+                capturedExtractChunkCount = doc.RootElement.GetProperty("chunks").GetArrayLength();
+                var extractions = Enumerable.Range(0, capturedExtractChunkCount)
+                    .Select(i => new { chunk_index = i, mentions = Array.Empty<object>(), facts = Array.Empty<object>() });
+                return JsonResponse(extractions);
+            }
+            if (path == "/graph/ingest")
+                return JsonResponse(new { entities_written = 0, facts_written = 0, edges_written = 0, skipped_chunks = Array.Empty<int>() });
+            return new HttpResponseMessage(System.Net.HttpStatusCode.OK);
+        });
+        await using var provider = CreateWorkerProvider(handler);
+        await SeedSourceAndJob(provider, configureVersion: v => v.EnableGraph = true);
+        var worker = provider.GetRequiredService<IngestionJobWorker>();
+
+        await worker.ProcessNextAsync();
+
+        await using var scope = provider.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        var job = await db.IngestionJobs.SingleAsync();
+        Assert.Equal(GraphExtractionStatuses.Succeeded, job.GraphExtractionStatus);
+        Assert.Equal(GraphExtractionService.MaxChunksPerGraphExtraction, capturedExtractChunkCount);
+    }
+
     private static HttpResponseMessage JsonResponse(object body) => new(System.Net.HttpStatusCode.OK)
     {
         Content = new StringContent(System.Text.Json.JsonSerializer.Serialize(body), System.Text.Encoding.UTF8, "application/json"),

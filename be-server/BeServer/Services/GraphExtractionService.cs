@@ -16,6 +16,13 @@ public class GraphExtractionService(
 {
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
 
+    // Caps how many of a source's chunks are sent to the AI server for
+    // extraction in one go. Sources with many chunks would otherwise trigger
+    // an unbounded number of sequential LLM calls; truncating (rather than
+    // failing the job) keeps ingestion never-break while still extracting a
+    // useful prefix of the document.
+    public const int MaxChunksPerGraphExtraction = 50;
+
     private string? AiInternalSecret =>
         string.IsNullOrWhiteSpace(config["AI_INTERNAL_SECRET"])
             ? config["INTERNAL_SECRET"]
@@ -37,7 +44,11 @@ public class GraphExtractionService(
             if (content.Chunks.Count == 0)
                 return GraphExtractionStatuses.Skipped;
 
-            var extractions = await ExtractAsync(content.Chunks, targetVersion.GraphExtractionModel, cancellationToken);
+            var chunksToExtract = content.Chunks.Count > MaxChunksPerGraphExtraction
+                ? content.Chunks.Take(MaxChunksPerGraphExtraction).ToList()
+                : content.Chunks;
+
+            var extractions = await ExtractAsync(chunksToExtract, targetVersion.GraphExtractionModel, cancellationToken);
             await rag.GraphIngestAsync(sourceId, notebookId, userId, targetVersion.Id, extractions);
             return GraphExtractionStatuses.Succeeded;
         }

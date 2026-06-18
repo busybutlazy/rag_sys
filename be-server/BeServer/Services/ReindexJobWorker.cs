@@ -190,6 +190,13 @@ public class ReindexJobWorker(
                 job.UpdatedAt = now;
                 await db.SaveChangesAsync(cancellationToken);
             }
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+            {
+                // Graceful shutdown, not a per-source failure -- let it
+                // propagate so the outer catch in ProcessNextAsync can mark
+                // the job Retrying instead of recording a bogus source failure.
+                throw;
+            }
             catch (Exception ex)
             {
                 logger.LogWarning(ex, "Reindex job {JobId}: source {SourceId} failed.", job.Id, source.Id);
